@@ -1,0 +1,85 @@
+name: Issue → Branch (dev)
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write   # to create refs
+  issues: write     # to post a comment
+
+jobs:
+  create-branch:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.action == 'opened' && contains(join(github.event.issue.labels.*.name), 'dev')
+      || (github.event.action == 'labeled' && github.event.label.name == 'dev')
+    steps:
+      - name: Determine base branch
+        id: base
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            // Prefer 'develop' if it exists; otherwise use default_branch (often 'main')
+            const repoInfo = await github.rest.repos.get({owner, repo});
+            let base = 'develop';
+            try {
+              await github.rest.git.getRef({owner, repo, ref: `heads/${base}`});
+            } catch {
+              base = repoInfo.data.default_branch;
+            }
+            core.setOutput('base', base);
+
+      - name: Create branch for issue
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue = context.payload.issue;
+            const base = core.getInput('base', { required: false }) || '${{ steps.base.outputs.base }}';
+
+            // Fetch base ref SHA
+            const baseRef = await github.rest.git.getRef({ owner, repo, ref: `heads/${base}` });
+            const sha = baseRef.data.object.sha;
+
+            // Slugify title
+            const slug = issue.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .substring(0, 40);
+
+            const branch = `dev/${issue.number}-${slug}`;
+
+            // Check if branch already exists
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+              core.notice(`Branch ${branch} already exists`);
+              core.setOutput('branch', branch);
+            } catch {
+              // Create the branch
+              await github.rest.git.createRef({
+                owner, repo,
+                ref: `refs/heads/${branch}`,
+                sha
+              });
+              core.setOutput('branch', branch);
+            }
+
+      - name: Comment with branch link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue = context.payload.issue;
+            const branch = '${{ steps.create.outputs.branch }}';
+            const url = `https://github.com/${owner}/${repo}/tree/${branch}`;
+            const msg = [
+              `🔀 Branch **${branch}** created from \`${{ steps.base.outputs.base }}\` for this dev issue.`,
+              ``,
+              `- Clone: \`git fetch && git switch ${branch}\``,
+              `- When ready, open a PR targeting \`${{ steps.base.outputs.base }}\`.`
+            ].join('\n');
+            await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: msg });
