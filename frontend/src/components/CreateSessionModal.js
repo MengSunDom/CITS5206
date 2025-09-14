@@ -1,3 +1,7 @@
+// DEPRECATED: This component has been replaced by CreateSessionModalConnected.js
+// which uses backend API for creating sessions with proper user authentication.
+// Keeping this file for reference only.
+
 import React, { useState } from 'react';
 
 function CreateSessionModal({ onClose, onCreateSession }) {

@@ -1,3 +1,7 @@
+// DEPRECATED: This component has been replaced by SessionManagerConnected.js
+// which uses backend API for session management instead of localStorage.
+// Keeping this file for reference only.
+
 import React from 'react';
 import './SessionManager.css';
 

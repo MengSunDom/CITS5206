@@ -1,3 +1,7 @@
+// DEPRECATED: This component has been replaced by GameAreaConnected.js
+// which uses backend API for all game logic instead of client-side logic.
+// Keeping this file for reference only.
+
 import React, { useState } from 'react';
 import './GameArea.css';
 
