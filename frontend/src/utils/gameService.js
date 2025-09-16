@@ -85,6 +85,23 @@ export const sessionService = {
     return response.json();
   },
 
+  // Get a specific deal by number
+  getDeal: async (sessionId, dealNumber) => {
+    const params = dealNumber ? `?deal_number=${dealNumber}` : '';
+    const response = await apiCall(`/game/sessions/${sessionId}/get_deal/${params}`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+
+  // Get all deals for a session
+  getAllDeals: async (sessionId) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/all_deals/`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+
   // Make a call (bid/pass/double/redouble)
   makeCall: async (sessionId, dealId, call, alert = '') => {
     const response = await apiCall('/game/sessions/make_call/', {
@@ -94,6 +111,41 @@ export const sessionService = {
         deal_id: dealId,
         call: call,
         alert: alert
+      }),
+    });
+    return response.json();
+  },
+
+  // Make a user-specific call (for independent bidding)
+  makeUserCall: async (sessionId, dealId, position, call, alert = '') => {
+    const response = await apiCall('/game/sessions/make_user_call/', {
+      method: 'POST',
+      body: JSON.stringify({
+        session_id: sessionId,
+        deal_id: dealId,
+        position: position,
+        call: call,
+        alert: alert
+      }),
+    });
+    return response.json();
+  },
+
+  // Get all users' bidding sequences for a deal
+  getUserSequences: async (sessionId, dealNumber) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/get_user_sequences/?deal_number=${dealNumber}`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+
+  // Reset user's bidding sequence for a deal
+  resetUserSequence: async (sessionId, dealId) => {
+    const response = await apiCall('/game/sessions/reset_user_sequence/', {
+      method: 'POST',
+      body: JSON.stringify({
+        session_id: sessionId,
+        deal_id: dealId
       }),
     });
     return response.json();

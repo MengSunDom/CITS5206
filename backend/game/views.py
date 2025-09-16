@@ -3,8 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from django.db import models
-from .models import Session, PlayerGame, Deal
+from django.db import models, transaction
+from django.utils import timezone
+from .models import Session, PlayerGame, Deal, UserBiddingSequence
 from .serializers import SessionSerializer, PlayerGameSerializer, DealSerializer
 from .utils import shuffle_and_deal, get_next_position, is_auction_complete, calculate_bid_value
 from django.contrib.auth import get_user_model
@@ -161,6 +162,46 @@ class SessionViewSet(viewsets.ModelViewSet):
         serializer = DealSerializer(deal)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'])
+    def get_deal(self, request, pk=None):
+        """Get a specific deal by deal number"""
+        session = self.get_object()
+        deal_number = request.query_params.get('deal_number')
+
+        if not deal_number:
+            # Return the latest deal
+            deal = session.deals.order_by('-deal_number').first()
+        else:
+            try:
+                deal_number = int(deal_number)
+                deal = session.deals.filter(deal_number=deal_number).first()
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid deal number'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if not deal:
+            return Response(
+                {'error': f'Deal {deal_number} not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = DealSerializer(deal)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def all_deals(self, request, pk=None):
+        """Get all deals for a session"""
+        session = self.get_object()
+        deals = session.deals.order_by('deal_number')
+        serializer = DealSerializer(deals, many=True)
+        return Response({
+            'deals': serializer.data,
+            'total': deals.count(),
+            'latest_deal_number': deals.last().deal_number if deals.exists() else 0
+        })
+
     @action(detail=False, methods=['post'])
     def make_call(self, request):
         """Make a call (bid, pass, double, redouble) in the current deal"""
@@ -177,10 +218,9 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         try:
             session = Session.objects.get(id=session_id)
-            deal = Deal.objects.get(id=deal_id, session=session)
-        except (Session.DoesNotExist, Deal.DoesNotExist):
+        except Session.DoesNotExist:
             return Response(
-                {'error': 'Session or deal not found'},
+                {'error': 'Session not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -203,19 +243,110 @@ class SessionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Allow asynchronous bidding - no turn validation
-        # Each user can bid independently
-        auction_history = deal.auction_history or []
+        # Use atomic transaction to prevent race conditions
+        with transaction.atomic():
+            # Lock the deal row for update to prevent concurrent modifications
+            try:
+                deal = Deal.objects.select_for_update().get(id=deal_id, session=session)
+            except Deal.DoesNotExist:
+                return Response(
+                    {'error': 'Deal not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Get the current auction history (fresh from DB due to lock)
+            auction_history = deal.auction_history or []
+
+            # Validate the call
+            call_type = 'bid' if call[0].isdigit() else 'action'
+
+            if call_type == 'bid':
+                # Check if bid is legal
+                last_bid_value = -1
+                for historical_call in auction_history:
+                    if historical_call.get('type') == 'bid':
+                        last_bid_value = calculate_bid_value(historical_call['call'])
+
+                new_bid_value = calculate_bid_value(call)
+                if new_bid_value <= last_bid_value:
+                    return Response(
+                        {'error': 'Bid must be higher than the last bid'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Add the call to auction history with timestamp for ordering
+            call_obj = {
+                'position': player_game.position,
+                'player': request.user.username,
+                'call': call,
+                'alert': alert_text,
+                'type': call_type,
+                'timestamp': timezone.now().isoformat(),
+                'call_index': len(auction_history)  # Add index for proper ordering
+            }
+
+            auction_history.append(call_obj)
+            deal.auction_history = auction_history
+
+            # Check if auction is complete
+            if is_auction_complete(auction_history):
+                deal.is_complete = True
+
+            deal.save()
+
+        # Return the updated deal (outside the transaction)
+        return Response({
+            'deal': DealSerializer(deal).data,
+            'auction_complete': deal.is_complete
+        })
+
+    @action(detail=False, methods=['post'])
+    def make_user_call(self, request):
+        """Make a call in user's independent bidding sequence"""
+        session_id = request.data.get('session_id')
+        deal_id = request.data.get('deal_id')
+        call = request.data.get('call')
+        position = request.data.get('position')  # Which position is making the call
+        alert_text = request.data.get('alert', '')
+
+        if not all([session_id, deal_id, call, position]):
+            return Response(
+                {'error': 'session_id, deal_id, call, and position are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            session = Session.objects.get(id=session_id)
+            deal = Deal.objects.get(id=deal_id, session=session)
+        except (Session.DoesNotExist, Deal.DoesNotExist):
+            return Response(
+                {'error': 'Session or deal not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get or create user's bidding sequence for this deal
+        user_sequence, created = UserBiddingSequence.objects.get_or_create(
+            deal=deal,
+            user=request.user,
+            defaults={'position': 'S'}  # Default starting position
+        )
 
         # Validate the call
         call_type = 'bid' if call[0].isdigit() else 'action'
 
         if call_type == 'bid':
-            # Check if bid is legal
+            # Check if bid is legal based on user's own sequence
             last_bid_value = -1
-            for historical_call in auction_history:
-                if historical_call.get('type') == 'bid':
-                    last_bid_value = calculate_bid_value(historical_call['call'])
+            for bid_entry in user_sequence.sequence:
+                if bid_entry.get('call', '')[0:1].isdigit():  # It's a bid
+                    last_bid_value = calculate_bid_value(bid_entry.get('call'))
 
             new_bid_value = calculate_bid_value(call)
             if new_bid_value <= last_bid_value:
@@ -224,27 +355,114 @@ class SessionViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-        # Add the call to auction history
-        call_obj = {
-            'position': player_game.position,
-            'player': request.user.username,
+        # Add the call to user's sequence
+        sequence = user_sequence.sequence or []
+        call_entry = {
+            'position': position,
             'call': call,
             'alert': alert_text,
-            'type': call_type
+            'type': call_type,
+            'timestamp': timezone.now().isoformat(),
+            'call_index': len(sequence)
         }
 
-        auction_history.append(call_obj)
-        deal.auction_history = auction_history
+        sequence.append(call_entry)
+        user_sequence.sequence = sequence
 
-        # Check if auction is complete
-        if is_auction_complete(auction_history):
-            deal.is_complete = True
+        # Check if auction is complete for this user
+        if is_auction_complete(sequence):
+            call_entry['auction_complete'] = True
 
-        deal.save()
+        user_sequence.save()
 
         return Response({
+            'user_sequence': {
+                'sequence': user_sequence.sequence,
+                'user': user_sequence.user.username,
+                'updated_at': user_sequence.updated_at
+            },
+            'auction_complete': call_entry.get('auction_complete', False)
+        })
+
+    @action(detail=True, methods=['get'])
+    def get_user_sequences(self, request, pk=None):
+        """Get all users' bidding sequences for a specific deal"""
+        session = self.get_object()
+        deal_number = request.query_params.get('deal_number')
+
+        if not deal_number:
+            return Response(
+                {'error': 'deal_number is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            deal = session.deals.get(deal_number=int(deal_number))
+        except Deal.DoesNotExist:
+            return Response(
+                {'error': f'Deal {deal_number} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get all user sequences for this deal
+        sequences = UserBiddingSequence.objects.filter(deal=deal)
+
+        result = {
             'deal': DealSerializer(deal).data,
-            'auction_complete': deal.is_complete
+            'user_sequences': []
+        }
+
+        for seq in sequences:
+            result['user_sequences'].append({
+                'user': seq.user.username,
+                'user_id': seq.user.id,
+                'sequence': seq.sequence,
+                'notes': seq.notes,
+                'updated_at': seq.updated_at
+            })
+
+        # Also check if current user has a sequence
+        current_user_sequence = sequences.filter(user=request.user).first()
+        result['has_user_sequence'] = current_user_sequence is not None
+
+        return Response(result)
+
+    @action(detail=False, methods=['post'])
+    def reset_user_sequence(self, request):
+        """Reset user's bidding sequence for a deal"""
+        session_id = request.data.get('session_id')
+        deal_id = request.data.get('deal_id')
+
+        if not all([session_id, deal_id]):
+            return Response(
+                {'error': 'session_id and deal_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            session = Session.objects.get(id=session_id)
+            deal = Deal.objects.get(id=deal_id, session=session)
+        except (Session.DoesNotExist, Deal.DoesNotExist):
+            return Response(
+                {'error': 'Session or deal not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Delete or reset user's sequence
+        UserBiddingSequence.objects.filter(
+            deal=deal,
+            user=request.user
+        ).delete()
+
+        return Response({
+            'message': 'Bidding sequence reset successfully'
         })
 
 

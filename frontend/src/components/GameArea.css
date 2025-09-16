@@ -184,6 +184,38 @@
   border-radius: 5px;
 }
 
+.auction-cell {
+  background: #2a2a3e;
+  padding: 10px;
+  text-align: center;
+  border-radius: 5px;
+  min-height: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #333;
+}
+
+.auction-cell .call-text {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.auction-cell .call-text.bid {
+  color: #4CAF50;
+}
+
+.auction-cell .call-text.action {
+  color: #ff9800;
+}
+
+.auction-cell .alert-indicator {
+  color: #ff5722;
+  margin-left: 4px;
+  font-weight: bold;
+}
+
 .bid-buttons {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
