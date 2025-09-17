@@ -10,17 +10,18 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [userPosition, setUserPosition] = useState('S'); // User's actual position in the game
-  const [pollingInterval, setPollingInterval] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [totalDeals, setTotalDeals] = useState(0);
   const [userSequence, setUserSequence] = useState([]); // User's own bidding sequence
   const [partnerSequence, setPartnerSequence] = useState([]); // Partner's bidding sequence
-  const [viewMode, setViewMode] = useState('bidding'); // 'bidding' or 'comparison'
+  const [viewMode, setViewMode] = useState('practice'); // 'practice' or 'history'
+  const [dealHistory, setDealHistory] = useState([]);
+  const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
 
-  // Load or create initial deal when component mounts
+  // Load initial deal from backend when component mounts
   useEffect(() => {
-    loadOrCreateDeal();
+    loadNextPractice();
     // Get user's actual position from session
     if (session.player_games) {
       const currentUserGame = session.player_games.find(pg =>
@@ -31,56 +32,94 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
         setUserPosition(currentUserGame.position);
       }
     }
+  }, [session.id]);
 
-    // Set up polling interval to sync partner's sequence
-    const interval = setInterval(() => {
-      if (currentDealNumber && viewMode === 'comparison') {
-        syncUserSequences();
-      }
-    }, 2000); // Poll every 2 seconds
-    setPollingInterval(interval);
-
-    // Cleanup on unmount
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [session.id, currentDealNumber]);
-
-  const loadOrCreateDeal = async () => {
+  const loadDealHistory = async () => {
     setIsLoading(true);
     setError('');
 
     try {
-      // First check all deals to see what's available
-      const allDealsResponse = await sessionService.getAllDeals(session.id);
+      const response = await sessionService.getDealHistory(session.id);
 
-      if (allDealsResponse.error || allDealsResponse.total === 0) {
-        // No deals exist, create the first one
-        const newDeal = await sessionService.createDeal(session.id);
-        setCurrentDeal(newDeal);
-        setCurrentDealNumber(newDeal.deal_number);
-        setCurrentPosition(newDeal.dealer);
-        setTotalDeals(1);
+      if (response.error) {
+        setError(response.error);
+        return;
+      }
+
+      if (response.history && response.history.length > 0) {
+        setDealHistory(response.history);
+        setCurrentHistoryIndex(0);
+        // Display the first completed deal
+        const firstDeal = response.history[0];
+        setCurrentDeal(firstDeal);
+        setCurrentDealNumber(firstDeal.deal_number);
+        setUserSequence(firstDeal.sequence);
+        setViewMode('history');
       } else {
-        // Load the latest deal that exists
-        setTotalDeals(allDealsResponse.total);
-        const latestDealNumber = allDealsResponse.latest_deal_number;
-        const dealResponse = await sessionService.getDeal(session.id, latestDealNumber);
-
-        if (!dealResponse.error) {
-          setCurrentDeal(dealResponse);
-          setCurrentDealNumber(dealResponse.deal_number);
-          // Start bidding from dealer position
-          setCurrentBiddingPosition(dealResponse.dealer);
-          // Load user's sequence if exists
-          loadUserSequences(latestDealNumber);
-        }
+        setError('No completed deals to review yet.');
       }
     } catch (err) {
-      setError('Failed to load deal. Please try again.');
-      console.error('Deal loading error:', err);
+      setError('Failed to load history. Please try again.');
+      console.error('History loading error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const navigateHistory = (direction) => {
+    if (dealHistory.length === 0) return;
+
+    let newIndex = currentHistoryIndex;
+    if (direction === 'next' && currentHistoryIndex < dealHistory.length - 1) {
+      newIndex = currentHistoryIndex + 1;
+    } else if (direction === 'prev' && currentHistoryIndex > 0) {
+      newIndex = currentHistoryIndex - 1;
+    }
+
+    if (newIndex !== currentHistoryIndex) {
+      setCurrentHistoryIndex(newIndex);
+      const deal = dealHistory[newIndex];
+      setCurrentDeal(deal);
+      setCurrentDealNumber(deal.deal_number);
+      setUserSequence(deal.sequence);
+    }
+  };
+
+  const returnToPractice = () => {
+    setViewMode('practice');
+    setDealHistory([]);
+    setCurrentHistoryIndex(0);
+    loadNextPractice();
+  };
+
+  const loadNextPractice = async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await sessionService.getNextPractice(session.id);
+
+      if (response.completed) {
+        // Set special completion message
+        setError('COMPLETION:All deals completed! Great job!');
+        return;
+      }
+
+      if (response.error) {
+        setError(response.error);
+        return;
+      }
+
+      // Set the deal and position from backend
+      setCurrentDeal(response.deal);
+      setCurrentDealNumber(response.deal.deal_number);
+      setCurrentBiddingPosition(response.position);
+      setUserSequence(response.user_sequence || []);
+      setTotalDeals(response.total_deals);
+      setAlertText('');
+    } catch (err) {
+      setError('Failed to load next practice. Please try again.');
+      console.error('Practice loading error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +137,10 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
           setUserSequence(currentUserSequence.sequence || []);
           // Update current bidding position based on sequence
           if (currentUserSequence.sequence.length > 0) {
-            const nextPos = calculateNextPositionFromSequence(currentUserSequence.sequence, currentDeal?.dealer);
+            const positions = ['W', 'N', 'E', 'S'];
+            const lastCall = currentUserSequence.sequence[currentUserSequence.sequence.length - 1];
+            const lastIndex = positions.indexOf(lastCall.position);
+            const nextPos = positions[(lastIndex + 1) % 4];
             setCurrentBiddingPosition(nextPos);
           }
         }
@@ -114,30 +156,6 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
     } catch (err) {
       console.error('Failed to load user sequences:', err);
     }
-  };
-
-  const syncUserSequences = async () => {
-    if (isSyncing) return;
-    setIsSyncing(true);
-    try {
-      await loadUserSequences(currentDealNumber);
-      setLastSyncTime(new Date());
-    } catch (err) {
-      console.error('Sync error:', err);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const calculateNextPositionFromSequence = (sequence, dealer) => {
-    if (!sequence || sequence.length === 0) {
-      return dealer || 'N';
-    }
-
-    const positions = ['W', 'N', 'E', 'S'];
-    const lastCall = sequence[sequence.length - 1];
-    const lastIndex = positions.indexOf(lastCall.position);
-    return positions[(lastIndex + 1) % 4];
   };
 
   // Helper function to rotate positions for display
@@ -183,14 +201,15 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
         setUserSequence(response.user_sequence.sequence);
         setAlertText('');
 
+        // Check if this deal's auction is complete
         if (response.auction_complete) {
-          handleAuctionComplete();
-        } else {
-          // Move to next position
-          const positions = ['W', 'N', 'E', 'S'];
-          const currentIndex = positions.indexOf(currentBiddingPosition);
-          setCurrentBiddingPosition(positions[(currentIndex + 1) % 4]);
+          alert(`Deal #${currentDealNumber} has been completed!`);
         }
+
+        // Automatically get next deal/position from backend after each call
+        setTimeout(() => {
+          loadNextPractice();
+        }, 1000); // 1 second delay before auto-transition
       }
     } catch (err) {
       setError('Failed to make call. Please try again.');
@@ -200,76 +219,8 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
     }
   };
 
-  const handleAuctionComplete = () => {
-    alert('Auction complete! The bidding has ended.');
-  };
 
-  const startNewDeal = async () => {
-    setIsLoading(true);
-    setError('');
 
-    try {
-      // First check if next deal already exists (created by partner)
-      const allDealsResponse = await sessionService.getAllDeals(session.id);
-      const nextDealNumber = currentDealNumber + 1;
-      setTotalDeals(allDealsResponse.total || 0);
-
-      // Check if the next deal already exists
-      const existingNextDeal = allDealsResponse.deals?.find(d => d.deal_number === nextDealNumber);
-
-      if (existingNextDeal) {
-        // Load the existing next deal
-        setCurrentDeal(existingNextDeal);
-        setCurrentDealNumber(existingNextDeal.deal_number);
-        setCurrentBiddingPosition(existingNextDeal.dealer);
-        setAlertText('');
-        setUserSequence([]);
-        setPartnerSequence([]);
-        loadUserSequences(existingNextDeal.deal_number);
-      } else {
-        // Create new deal
-        const newDeal = await sessionService.createDeal(session.id);
-        setCurrentDeal(newDeal);
-        setCurrentDealNumber(newDeal.deal_number);
-        setCurrentBiddingPosition(newDeal.dealer);
-        setAlertText('');
-        setUserSequence([]);
-        setPartnerSequence([]);
-        setTotalDeals(prev => prev + 1);
-      }
-    } catch (err) {
-      setError('Failed to create new deal. Please try again.');
-      console.error('New deal error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const navigateToDeal = async (dealNumber) => {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const dealResponse = await sessionService.getDeal(session.id, dealNumber);
-
-      if (!dealResponse.error) {
-        setCurrentDeal(dealResponse);
-        setCurrentDealNumber(dealResponse.deal_number);
-        setCurrentBiddingPosition(dealResponse.dealer);
-        setAlertText('');
-        setUserSequence([]);
-        setPartnerSequence([]);
-        loadUserSequences(dealResponse.deal_number);
-      } else {
-        setError(`Deal ${dealNumber} not found.`);
-      }
-    } catch (err) {
-      setError('Failed to load deal.');
-      console.error('Navigate deal error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const isLegalBid = (bid) => {
     if (!userSequence || userSequence.length === 0) return true;
@@ -399,38 +350,72 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
 
   const renderAuctionHistory = () => {
     // Show user's own sequence
-    const sequence = viewMode === 'comparison' && partnerSequence.length > 0 ? partnerSequence : userSequence;
+    const sequence = userSequence;
+
+    // Get dealer from currentDeal
+    const dealer = currentDeal?.dealer || 'N';
 
     if (!sequence || sequence.length === 0) {
-      return <p>No bids yet. Dealer: {currentDeal?.dealer || 'N'} starts.</p>;
+      return <p>No bids yet. Dealer: {dealer} starts.</p>;
     }
 
+    // Standard bridge table columns: W-N-E-S
     const positions = ['W', 'N', 'E', 'S'];
-    const rows = [];
 
-    // Start from dealer position
-    const dealerIndex = positions.indexOf(currentDeal?.dealer || 'N');
-    let currentRow = new Array(4).fill(null);
-    let expectedPosition = dealerIndex;
+    // Create the auction grid
+    const createAuctionGrid = (dealer, sequence) => {
+      const rows = [];
+      let currentRow = [null, null, null, null]; // W, N, E, S
+      let callsPlacedInRow = 0;
 
-    for (const call of sequence) {
-      const callPositionIndex = positions.indexOf(call.position);
-      currentRow[callPositionIndex] = call;
+      for (let i = 0; i < sequence.length; i++) {
+        const call = sequence[i];
+        const callPosition = call.position;
+        const callColumnIndex = positions.indexOf(callPosition);
 
-      // Move to next expected position
-      expectedPosition = (expectedPosition + 1) % 4;
+        // Place the call
+        currentRow[callColumnIndex] = call;
+        callsPlacedInRow++;
 
-      // If we've completed a row (back to dealer position), start a new row
-      if (expectedPosition === dealerIndex) {
-        rows.push([...currentRow]);
-        currentRow = new Array(4).fill(null);
+        // Check if we need a new row AFTER placing the call
+        if (callsPlacedInRow >= 4 && i < sequence.length - 1) {
+          // Row is full and there are more calls to place
+          rows.push([...currentRow]);
+          currentRow = [null, null, null, null];
+          callsPlacedInRow = 0;
+        }
       }
-    }
 
-    // Add partial row if exists
-    if (currentRow.some(c => c !== null)) {
-      rows.push(currentRow);
-    }
+      // Add the last row if it has any content
+      if (callsPlacedInRow > 0 || rows.length === 0) {
+        rows.push(currentRow);
+      }
+
+      return rows;
+    };
+
+    const rows = createAuctionGrid(dealer, sequence);
+
+    // Format bid with suit symbols
+    const formatBid = (bid) => {
+      if (!bid) return bid;
+      if (bid === 'Pass' || bid === 'X' || bid === 'XX') return bid;
+
+      // Replace suit letters with symbols for numbered bids
+      if (bid.match(/^[1-7]/)) {
+        const level = bid[0];
+        const suit = bid.substring(1);
+        const suitSymbols = {
+          'C': '♣',
+          'D': '♦',
+          'H': '♥',
+          'S': '♠',
+          'NT': 'NT'
+        };
+        return level + (suitSymbols[suit] || suit);
+      }
+      return bid;
+    };
 
     return (
       <div className="auction-table">
@@ -439,16 +424,21 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
         <div className="auction-header">East</div>
         <div className="auction-header">South</div>
         {rows.map((row, rowIndex) => (
-          row.map((call, colIndex) => (
+          row.map((cell, colIndex) => (
             <div key={`${rowIndex}-${colIndex}`} className="auction-cell">
-              {call ? (
+              {cell ? (
                 <>
-                  <span className={`call-text ${call.type}`}>
-                    {call.call}
+                  <span
+                    className={`call-text ${cell.call && cell.call.match(/^[1-7]/) ? 'bid' : ''}`}
+                    data-call={cell.call}
+                  >
+                    {formatBid(cell.call)}
                   </span>
-                  {call.alert && <span className="alert-indicator">*</span>}
+                  {cell.alert && <span className="alert-indicator">✱</span>}
                 </>
-              ) : ''}
+              ) : (
+                ''
+              )}
             </div>
           ))
         ))}
@@ -497,7 +487,7 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
         <button className="back-btn" onClick={onBackToSessions}>
           ← Back to Sessions
         </button>
-        <h2>{session.name} - Deal {currentDeal?.deal_number || '...'}</h2>
+        <h2>{session.name} {viewMode === 'history' ? '- History Review' : ''}</h2>
         <div style={{
           position: 'absolute',
           right: '20px',
@@ -514,16 +504,23 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
       </div>
 
       {error && (
-        <div className="error-message" style={{ color: 'red', margin: '10px 0' }}>
-          {error}
+        <div
+          className="error-message"
+          style={{
+            color: error.startsWith('COMPLETION:') ? 'white' : 'red',
+            backgroundColor: error.startsWith('COMPLETION:') ? 'red' : 'transparent',
+            padding: error.startsWith('COMPLETION:') ? '15px' : '0',
+            borderRadius: error.startsWith('COMPLETION:') ? '5px' : '0',
+            fontWeight: error.startsWith('COMPLETION:') ? 'bold' : 'normal',
+            textAlign: error.startsWith('COMPLETION:') ? 'center' : 'left',
+            margin: '10px 0'
+          }}
+        >
+          {error.startsWith('COMPLETION:') ? error.replace('COMPLETION:', '') : error}
         </div>
       )}
 
       <div className="game-info">
-        <div className="info-card">
-          <h3>Current Deal</h3>
-          <div className="value">{currentDeal?.deal_number || '-'}</div>
-        </div>
         <div className="info-card">
           <h3>Dealer</h3>
           <div className="value">{currentDeal?.dealer || '-'}</div>
@@ -533,7 +530,7 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
           <div className="value">{currentDeal?.vulnerability || '-'}</div>
         </div>
         <div className="info-card">
-          <h3>Current Position</h3>
+          <h3>Bidding As</h3>
           <div className="value">{currentBiddingPosition || '-'}</div>
         </div>
       </div>
@@ -542,90 +539,65 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
 
       <div className="bidding-area">
         <div className="auction-history">
-          <h3>
-            {viewMode === 'comparison' ? 'Partner\'s Auction' : 'Your Auction'}
-            <button
-              onClick={() => {
-                setViewMode(viewMode === 'bidding' ? 'comparison' : 'bidding');
-                if (viewMode === 'bidding') {
-                  loadUserSequences(currentDealNumber);
-                }
-              }}
-              style={{
-                marginLeft: '20px',
-                padding: '5px 10px',
-                fontSize: '12px',
-                background: '#00d4ff',
-                color: '#1a1a2e',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
-            >
-              {viewMode === 'comparison' ? 'Show My Auction' : 'Compare with Partner'}
-            </button>
-          </h3>
+          <h3>Auction History</h3>
           {renderAuctionHistory()}
         </div>
 
         <div className="bid-controls">
-          <h3>Make Your Call</h3>
-          {renderBidButtons()}
+          {viewMode === 'practice' ? (
+            <>
+              <h3>Make Your Call (Position: {currentBiddingPosition})</h3>
+              {renderBidButtons()}
+            </>
+          ) : (
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <h3>Reviewing Completed Deal #{currentDealNumber}</h3>
+              <p style={{ color: '#666', marginTop: '10px' }}>
+                This deal has been completed. Use the navigation buttons below to browse through your history.
+              </p>
+            </div>
+          )}
 
-          <div className="special-calls">
-            <button
-              className="special-call"
-              onClick={() => makeCall('Pass')}
-              disabled={isLoading}
-            >
-              Pass
-            </button>
-            <button
-              className="special-call"
-              onClick={() => makeCall('X')}
-              disabled={isLoading}
-            >
-              Double (X)
-            </button>
-            <button
-              className="special-call"
-              onClick={() => makeCall('XX')}
-              disabled={isLoading}
-            >
-              Redouble (XX)
-            </button>
-            <button
-              className="special-call"
-              onClick={async () => {
-                if (currentDeal) {
-                  try {
-                    await sessionService.resetUserSequence(session.id, currentDeal.id);
-                    setUserSequence([]);
-                    setCurrentBiddingPosition(currentDeal?.dealer || 'N');
-                    setError('');
-                  } catch (err) {
-                    setError('Failed to reset bidding');
-                  }
-                }
-              }}
-              style={{ background: '#ff5722' }}
-            >
-              Reset Bidding
-            </button>
-          </div>
+          {viewMode === 'practice' && (
+            <div className="special-calls">
+              <button
+                className="special-call"
+                onClick={() => makeCall('Pass')}
+                disabled={isLoading}
+              >
+                Pass
+              </button>
+              <button
+                className="special-call"
+                onClick={() => makeCall('X')}
+                disabled={isLoading}
+              >
+                Double (X)
+              </button>
+              <button
+                className="special-call"
+                onClick={() => makeCall('XX')}
+                disabled={isLoading}
+              >
+                Redouble (XX)
+              </button>
+            </div>
+          )}
 
-          <div className="alert-section">
-            <label htmlFor="alertText">Alert (optional):</label>
-            <input
-              type="text"
-              id="alertText"
-              className="alert-input"
-              placeholder="Explain your call..."
-              value={alertText}
-              onChange={(e) => setAlertText(e.target.value)}
-              disabled={isLoading}
-            />
-          </div>
+          {viewMode === 'practice' && (
+            <div className="alert-section">
+              <label htmlFor="alertText">Alert (optional):</label>
+              <input
+                type="text"
+                id="alertText"
+                className="alert-input"
+                placeholder="Explain your call..."
+                value={alertText}
+                onChange={(e) => setAlertText(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -633,32 +605,49 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
         <button className="create-session tree-btn" onClick={onShowTreeView}>
           View Auction Tree
         </button>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        {viewMode === 'practice' ? (
           <button
             className="create-session"
-            onClick={() => navigateToDeal(currentDealNumber - 1)}
-            disabled={isLoading || currentDealNumber <= 1}
-            style={{ padding: '10px 20px' }}
-          >
-            ← Previous
-          </button>
-          <span style={{ fontSize: '14px', color: '#666' }}>
-            Deal {currentDealNumber} of {Math.max(totalDeals, currentDealNumber || 1)}
-          </span>
-          <button
-            className="create-session next-btn"
             onClick={() => {
-              if (currentDealNumber < totalDeals) {
-                navigateToDeal(currentDealNumber + 1);
-              } else {
-                startNewDeal();
-              }
+              // Switch to history view
+              loadDealHistory();
             }}
             disabled={isLoading}
+            style={{ padding: '10px 20px' }}
           >
-            {isLoading ? 'Loading...' : (currentDealNumber < totalDeals ? 'Next Deal →' : 'New Deal +')}
+            📜 View History
           </button>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              className="create-session"
+              onClick={() => navigateHistory('prev')}
+              disabled={currentHistoryIndex === 0 || isLoading}
+              style={{ padding: '10px 20px' }}
+            >
+              ← Previous
+            </button>
+            <span style={{ padding: '10px', alignSelf: 'center' }}>
+              Deal {currentHistoryIndex + 1} of {dealHistory.length}
+            </span>
+            <button
+              className="create-session"
+              onClick={() => navigateHistory('next')}
+              disabled={currentHistoryIndex >= dealHistory.length - 1 || isLoading}
+              style={{ padding: '10px 20px' }}
+            >
+              Next →
+            </button>
+            <button
+              className="create-session"
+              onClick={returnToPractice}
+              disabled={isLoading}
+              style={{ padding: '10px 20px', background: '#00d4ff' }}
+            >
+              ↩ Back to Practice
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

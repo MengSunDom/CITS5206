@@ -105,3 +105,8 @@ def calculate_bid_value(bid: str) -> int:
         return -1
 
     return level * 5 + suit_values[suit]
+
+def generate_random_hands():
+    """Generate random hands for a bridge deal
+    This is an alias for shuffle_and_deal() for backward compatibility"""
+    return shuffle_and_deal()

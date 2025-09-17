@@ -166,54 +166,102 @@
   font-size: 1.3rem;
 }
 
+/* Professional Bridge Auction Table */
 .auction-table {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
+  grid-template-columns: repeat(4, minmax(80px, 1fr));
+  gap: 0;
   background: #1a1a2e;
-  padding: 15px;
-  border-radius: 8px;
+  border: 2px solid #2a2a3e;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  margin: 20px 0;
 }
 
 .auction-header {
-  background: #00d4ff;
-  color: #1a1a2e;
-  padding: 10px;
+  background: linear-gradient(180deg, #2d2d42 0%, #232338 100%);
+  color: #ffffff;
+  padding: 12px 8px;
   text-align: center;
-  font-weight: bold;
-  border-radius: 5px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-right: 1px solid #3a3a4e;
+  border-bottom: 2px solid #00d4ff;
+}
+
+.auction-header:last-child {
+  border-right: none;
 }
 
 .auction-cell {
-  background: #2a2a3e;
-  padding: 10px;
+  background: #1e1e32;
+  padding: 10px 8px;
   text-align: center;
-  border-radius: 5px;
-  min-height: 50px;
+  min-height: 42px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  border: 1px solid #333;
+  border-right: 1px solid #2a2a3e;
+  border-bottom: 1px solid #2a2a3e;
+  transition: background 0.15s ease;
+  position: relative;
+}
+
+.auction-cell:nth-child(4n) {
+  border-right: none;
+}
+
+.auction-cell:hover:not(.blank-cell) {
+  background: #252540;
+}
+
+/* Blank cells (dashes) */
+.auction-cell.blank-cell {
+  background: #18182a;
+  color: #4a4a5e;
+  font-size: 18px;
 }
 
 .auction-cell .call-text {
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  letter-spacing: 0.3px;
 }
 
+/* Bid styling with suit colors */
 .auction-cell .call-text.bid {
-  color: #4CAF50;
+  color: #ffffff;
 }
 
-.auction-cell .call-text.action {
-  color: #ff9800;
+/* Pass styling */
+.auction-cell .call-text[data-call="Pass"] {
+  color: #7a7a8e;
+  font-style: italic;
+  font-size: 14px;
+}
+
+/* Double */
+.auction-cell .call-text[data-call="X"] {
+  color: #ff4757;
+  font-weight: bold;
+}
+
+/* Redouble */
+.auction-cell .call-text[data-call="XX"] {
+  color: #ffa502;
+  font-weight: bold;
 }
 
 .auction-cell .alert-indicator {
-  color: #ff5722;
-  margin-left: 4px;
-  font-weight: bold;
+  color: #00d4ff;
+  margin-left: 3px;
+  font-size: 12px;
+  vertical-align: super;
 }
 
 .bid-buttons {
@@ -249,11 +297,12 @@
   line-height: 1.2;
 }
 
-.suit-s { color: #00d4ff; }
-.suit-h { color: #e74c3c; }
-.suit-d { color: #e74c3c; }
-.suit-c { color: #00d4ff; }
-.suit-nt { color: #f39c12; }
+/* Bridge Suit Colors - Standard International */
+.suit-s { color: #000000; } /* Spades - Black */
+.suit-h { color: #e74c3c; } /* Hearts - Red */
+.suit-d { color: #ff6b35; } /* Diamonds - Orange/Red */
+.suit-c { color: #2ecc71; } /* Clubs - Green */
+.suit-nt { color: #f39c12; } /* No Trump - Gold */
 
 .special-calls {
   display: flex;

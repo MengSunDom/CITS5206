@@ -370,7 +370,11 @@ class SessionViewSet(viewsets.ModelViewSet):
         user_sequence.sequence = sequence
 
         # Check if auction is complete for this user
+        deal_just_completed = False
         if is_auction_complete(sequence):
+            # Check if this is the first time this deal is being completed
+            if not call_entry.get('auction_complete'):
+                deal_just_completed = True
             call_entry['auction_complete'] = True
 
         user_sequence.save()
@@ -381,7 +385,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 'user': user_sequence.user.username,
                 'updated_at': user_sequence.updated_at
             },
-            'auction_complete': call_entry.get('auction_complete', False)
+            'auction_complete': deal_just_completed
         })
 
     @action(detail=True, methods=['get'])
@@ -463,6 +467,207 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         return Response({
             'message': 'Bidding sequence reset successfully'
+        })
+
+    @action(detail=True, methods=['get'])
+    def get_deal_history(self, request, pk=None):
+        """Get all completed deals history for the user"""
+        session = self.get_object()
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get all deals with user sequences
+        all_deals = Deal.objects.filter(session=session).order_by('deal_number')
+        history = []
+
+        for deal in all_deals:
+            user_sequence = UserBiddingSequence.objects.filter(
+                deal=deal,
+                user=request.user
+            ).first()
+
+            if user_sequence and user_sequence.sequence:
+                # Check if this deal's auction is complete
+                if is_auction_complete(user_sequence.sequence):
+                    history.append({
+                        'deal_id': deal.id,
+                        'deal_number': deal.deal_number,
+                        'hands': deal.hands,
+                        'dealer': deal.dealer,
+                        'vulnerability': deal.vulnerability,
+                        'sequence': user_sequence.sequence,
+                        'completed_at': user_sequence.updated_at
+                    })
+
+        return Response({
+            'history': history,
+            'total_completed': len(history)
+        })
+
+    @action(detail=True, methods=['get'])
+    def get_next_practice(self, request, pk=None):
+        """Get next deal and position for practice following bridge rules"""
+        import random
+        import time
+        from django.db import transaction, IntegrityError, OperationalError
+
+        session = self.get_object()
+        MAX_DEALS = 8  # Development: 8, Production: 64 or 128
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Try to handle database lock with retries
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                # Get all deals for this session (use select_for_update to lock properly)
+                all_deals = list(Deal.objects.filter(session=session).order_by('deal_number'))
+
+                # Create deals if needed (up to MAX_DEALS)
+                current_deal_count = len(all_deals)
+
+                if current_deal_count < MAX_DEALS:
+                    from .utils import generate_random_hands
+
+                    # Calculate next deal number outside transaction
+                    deal_numbers = [d.deal_number for d in all_deals]
+                    max_deal_number = max(deal_numbers) if deal_numbers else 0
+                    new_deal_number = max_deal_number + 1
+
+                    if new_deal_number <= MAX_DEALS:
+                        # Prepare deal data
+                        dealers = ['N', 'E', 'S', 'W']
+                        dealer_index = (new_deal_number - 1) % 4
+                        new_dealer = dealers[dealer_index]
+
+                        vulnerability_pattern = ['None', 'N-S', 'E-W', 'Both']
+                        vulnerability = vulnerability_pattern[(new_deal_number - 1) % 4]
+
+                        new_hands = generate_random_hands()
+
+                        # Try to create the deal
+                        try:
+                            with transaction.atomic():
+                                # Quick check and create
+                                if not Deal.objects.filter(session=session, deal_number=new_deal_number).exists():
+                                    new_deal = Deal.objects.create(
+                                        session=session,
+                                        deal_number=new_deal_number,
+                                        hands=new_hands,
+                                        dealer=new_dealer,
+                                        vulnerability=vulnerability
+                                    )
+                                    all_deals.append(new_deal)
+                        except IntegrityError:
+                            # Deal already exists, just continue
+                            pass
+                        except OperationalError as e:
+                            if 'database is locked' in str(e) and retry_count < max_retries - 1:
+                                time.sleep(0.1 * (retry_count + 1))  # Wait before retry
+                                retry_count += 1
+                                continue
+                            raise
+
+                # If we get here, break out of retry loop
+                break
+
+            except OperationalError as e:
+                if 'database is locked' in str(e) and retry_count < max_retries - 1:
+                    time.sleep(0.1 * (retry_count + 1))  # Wait before retry
+                    retry_count += 1
+                    continue
+                raise
+
+        # Refresh the deals list
+        all_deals = list(Deal.objects.filter(session=session).order_by('deal_number'))
+
+        # Find deals that are not complete for this user
+        available_deals = []
+        available_positions = {}
+
+        for deal in all_deals:
+            # Get user's sequence for this deal
+            user_sequence = UserBiddingSequence.objects.filter(
+                deal=deal,
+                user=request.user
+            ).first()
+
+            if user_sequence and user_sequence.sequence:
+                # Check if auction is complete for this user
+                if is_auction_complete(user_sequence.sequence):
+                    continue  # Skip completed deals
+
+                # Find which positions are still available based on sequence
+                sequence = user_sequence.sequence
+                last_position = sequence[-1]['position'] if sequence else None
+
+                # Bridge rules: After a position bids, specific positions can follow
+                # N -> E, E -> S, S -> W, W -> N (clockwise)
+                position_order = {
+                    'N': 'E',
+                    'E': 'S',
+                    'S': 'W',
+                    'W': 'N'
+                }
+
+                # Determine next valid position
+                if last_position:
+                    next_position = position_order.get(last_position, 'N')
+                    available_positions[deal.id] = [next_position]
+                else:
+                    # If no sequence yet, can start from any position
+                    available_positions[deal.id] = ['N', 'E', 'S', 'W']
+
+                available_deals.append(deal)
+            else:
+                # No sequence yet for this deal, all positions available
+                available_positions[deal.id] = ['N', 'E', 'S', 'W']
+                available_deals.append(deal)
+
+        if not available_deals:
+            # All deals complete
+            return Response({
+                'message': 'All deals completed!',
+                'completed': True
+            })
+
+        # Pick a random available deal
+        selected_deal = random.choice(available_deals)
+
+        # Pick a random position from available positions for this deal
+        positions = available_positions[selected_deal.id]
+        selected_position = random.choice(positions)
+
+        # Get user's existing sequence for this deal (if any)
+        user_sequence = UserBiddingSequence.objects.filter(
+            deal=selected_deal,
+            user=request.user
+        ).first()
+
+        return Response({
+            'deal': {
+                'id': selected_deal.id,
+                'deal_number': selected_deal.deal_number,
+                'hands': selected_deal.hands,
+                'dealer': selected_deal.dealer,
+                'vulnerability': selected_deal.vulnerability
+            },
+            'position': selected_position,
+            'user_sequence': user_sequence.sequence if user_sequence else [],
+            'total_deals': len(all_deals),
+            'max_deals': MAX_DEALS
         })
 
 

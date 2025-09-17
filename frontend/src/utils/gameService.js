@@ -150,6 +150,22 @@ export const sessionService = {
     });
     return response.json();
   },
+
+  // Get next deal and position for practice
+  getNextPractice: async (sessionId) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/get_next_practice/`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+
+  // Get deal history for review
+  getDealHistory: async (sessionId) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/get_deal_history/`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
 };
 
 // PlayerGame API calls
