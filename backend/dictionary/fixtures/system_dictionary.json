@@ -1,0 +1,20 @@
+[
+  {"model": "dictionary.systemdictionary","pk":1,"fields":{"category":"auction_status","code":"active","name":"Active","description":"Currently ongoing","is_active":true,"sort_order":1}},
+  {"model": "dictionary.systemdictionary","pk":2,"fields":{"category":"auction_status","code":"closed","name":"Closed","description":"Auction has ended","is_active":true,"sort_order":2}},
+  {"model": "dictionary.systemdictionary","pk":3,"fields":{"category":"auction_status","code":"archived","name":"Archived","description":"Historical record","is_active":true,"sort_order":3}},
+
+  {"model": "dictionary.systemdictionary","pk":10,"fields":{"category":"membership_role","code":"N","name":"North","description":"North seat","is_active":true,"sort_order":1}},
+  {"model": "dictionary.systemdictionary","pk":11,"fields":{"category":"membership_role","code":"S","name":"South","description":"South seat","is_active":true,"sort_order":2}},
+  {"model": "dictionary.systemdictionary","pk":12,"fields":{"category":"membership_role","code":"E","name":"East","description":"East seat","is_active":true,"sort_order":3}},
+  {"model": "dictionary.systemdictionary","pk":13,"fields":{"category":"membership_role","code":"W","name":"West","description":"West seat","is_active":true,"sort_order":4}},
+
+  {"model": "dictionary.systemdictionary","pk":20,"fields":{"category":"annotation_type","code":"system","name":"System","description":"System-defined meaning","is_active":true,"sort_order":1}},
+  {"model": "dictionary.systemdictionary","pk":21,"fields":{"category":"annotation_type","code":"note","name":"Note","description":"General note","is_active":true,"sort_order":2}},
+  {"model": "dictionary.systemdictionary","pk":22,"fields":{"category":"annotation_type","code":"disagreement","name":"Disagreement","description":"Indicates disagreement","is_active":true,"sort_order":3}},
+  {"model": "dictionary.systemdictionary","pk":23,"fields":{"category":"annotation_type","code":"example","name":"Example","description":"Provides an example","is_active":true,"sort_order":4}},
+
+  {"model": "dictionary.systemdictionary","pk":30,"fields":{"category":"event_action","code":"create_node","name":"Create Node","description":"Create a new bidding node","is_active":true,"sort_order":1}},
+  {"model": "dictionary.systemdictionary","pk":31,"fields":{"category":"event_action","code":"edit_node","name":"Edit Node","description":"Edit an existing bidding node","is_active":true,"sort_order":2}},
+  {"model": "dictionary.systemdictionary","pk":32,"fields":{"category":"event_action","code":"delete_node","name":"Delete Node","description":"Remove a bidding node","is_active":true,"sort_order":3}},
+  {"model": "dictionary.systemdictionary","pk":33,"fields":{"category":"event_action","code":"close_auction","name":"Close Auction","description":"End the auction process","is_active":true,"sort_order":4}}
+]
