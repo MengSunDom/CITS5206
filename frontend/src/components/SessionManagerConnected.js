@@ -3,7 +3,7 @@ import { sessionService } from '../utils/gameService';
 import CreateSessionModalConnected from './CreateSessionModalConnected';
 import './SessionManager.css';
 
-function SessionManagerConnected({ onEnterSession, onViewComparison }) {
+function SessionManagerConnected({ onEnterSession, onViewComparison, onShowTreeView }) {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -88,6 +88,12 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
               onClick={() => onEnterSession(session)}
             >
               Enter Session
+            </button>
+            <button
+              className="create-session tree-btn"
+              onClick={() => onShowTreeView(session)}
+            >
+              View Auction Tree
             </button>
             {completedBids >= 2 && (
               <button

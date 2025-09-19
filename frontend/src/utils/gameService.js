@@ -152,8 +152,8 @@ export const sessionService = {
   },
 
   // Get next deal and position for practice
-  getNextPractice: async (sessionId) => {
-    const response = await apiCall(`/game/sessions/${sessionId}/get_next_practice/`, {
+  getNextPractice: async (sessionId, currentDealNumber = 0) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/get_next_practice/?current_deal=${currentDealNumber}`, {
       method: 'GET',
     });
     return response.json();

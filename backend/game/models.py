@@ -27,6 +27,8 @@ class Session(models.Model):
     dealer = models.CharField(max_length=1, choices= position_choice, default='N')
     hands = models.JSONField(default=dict)
     vulnerability = models.CharField(max_length=20, choices=VULNERABILITY_CHOICES, default='None')
+    seed = models.CharField(max_length=100, blank=True, null=True)  # Store RNG seed for reproducible deals
+    max_deals = models.PositiveIntegerField(default=4)  # Maximum number of deals in this session
 
     def __str__(self):
         return f"{self.name} (Created by {self.creator.email})"

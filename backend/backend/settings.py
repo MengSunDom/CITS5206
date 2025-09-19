@@ -215,3 +215,15 @@ SPECTACULAR_SETTINGS = {
         'displayOperationId': False,
     },
 }
+
+# Bridge Game Configuration
+import os
+
+# Environment mode: 'dev' or 'prod'
+ENV_MODE = os.getenv('ENV_MODE', 'dev')
+
+# Maximum deals per session based on environment
+if ENV_MODE == 'dev':
+    MAX_DEALS_PER_SESSION = 4
+else:
+    MAX_DEALS_PER_SESSION = int(os.getenv('MAX_DEALS_PER_SESSION', '32'))

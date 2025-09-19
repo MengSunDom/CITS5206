@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { sessionService } from '../utils/gameService';
 import './GameArea.css';
 
-function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdateSession }) {
+function GameAreaConnected({ session, onBackToSessions}) {
   const [currentDeal, setCurrentDeal] = useState(null);
   const [currentDealNumber, setCurrentDealNumber] = useState(null);
   const [currentBiddingPosition, setCurrentBiddingPosition] = useState(''); // Position currently bidding
@@ -14,7 +14,6 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [totalDeals, setTotalDeals] = useState(0);
   const [userSequence, setUserSequence] = useState([]); // User's own bidding sequence
-  const [partnerSequence, setPartnerSequence] = useState([]); // Partner's bidding sequence
   const [viewMode, setViewMode] = useState('practice'); // 'practice' or 'history'
   const [dealHistory, setDealHistory] = useState([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
@@ -97,7 +96,7 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
     setError('');
 
     try {
-      const response = await sessionService.getNextPractice(session.id);
+      const response = await sessionService.getNextPractice(session.id, currentDealNumber || 0);
 
       if (response.completed) {
         // Set special completion message
@@ -125,39 +124,6 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
     }
   };
 
-  const loadUserSequences = async (dealNumber) => {
-    try {
-      const response = await sessionService.getUserSequences(session.id, dealNumber || currentDealNumber);
-      if (!response.error) {
-        // Find current user's sequence
-        const currentUserSequence = response.user_sequences?.find(
-          seq => seq.user === JSON.parse(localStorage.getItem('user') || '{}').username
-        );
-        if (currentUserSequence) {
-          setUserSequence(currentUserSequence.sequence || []);
-          // Update current bidding position based on sequence
-          if (currentUserSequence.sequence.length > 0) {
-            const positions = ['W', 'N', 'E', 'S'];
-            const lastCall = currentUserSequence.sequence[currentUserSequence.sequence.length - 1];
-            const lastIndex = positions.indexOf(lastCall.position);
-            const nextPos = positions[(lastIndex + 1) % 4];
-            setCurrentBiddingPosition(nextPos);
-          }
-        }
-
-        // Find partner's sequence
-        const partnerSeq = response.user_sequences?.find(
-          seq => seq.user !== JSON.parse(localStorage.getItem('user') || '{}').username
-        );
-        if (partnerSeq) {
-          setPartnerSequence(partnerSeq.sequence || []);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load user sequences:', err);
-    }
-  };
-
   // Helper function to rotate positions for display
   const rotatePosition = (position) => {
     // This function rotates the table so that the user always appears at South
@@ -182,6 +148,15 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
 
   const makeCall = async (call) => {
     if (!currentDeal) return;
+
+    // Validate the call before sending to backend
+    const auctionState = getAuctionState();
+    const validation = validateCall(auctionState, call, currentBiddingPosition);
+
+    if (!validation.ok) {
+      setError(validation.error);
+      return;
+    }
 
     setIsLoading(true);
     setError('');
@@ -223,18 +198,9 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
 
 
   const isLegalBid = (bid) => {
-    if (!userSequence || userSequence.length === 0) return true;
-
-    // Find last bid in user's own sequence
-    let lastBidValue = -1;
-    for (const call of userSequence) {
-      if (call.call && call.call[0].match(/[1-7]/)) {
-        lastBidValue = getBidValue(call.call);
-      }
-    }
-
-    const newBidValue = getBidValue(bid);
-    return newBidValue > lastBidValue;
+    const auctionState = getAuctionState();
+    const validation = validateCall(auctionState, bid, currentBiddingPosition);
+    return validation.ok;
   };
 
   const getBidValue = (bid) => {
@@ -245,6 +211,168 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
     const suitValues = { 'C': 0, 'D': 1, 'H': 2, 'S': 3, 'NT': 4 };
 
     return level * 5 + suitValues[suit];
+  };
+
+  // Complete bridge auction validation function
+  const validateCall = (auctionState, call, seat) => {
+    const { toActSeat, highestBid, dblStatus, auctionEnded } = auctionState;
+
+    // Check if auction has already ended
+    if (auctionEnded) {
+      return { ok: false, error: "Auction already ended" };
+    }
+
+    // Check if it's the correct seat's turn
+    if (seat !== toActSeat) {
+      return { ok: false, error: `It's ${toActSeat}'s turn to act, not ${seat}'s` };
+    }
+
+    // Normalize call format
+    if (call === 'P') call = 'Pass';
+    if (call === 'Double') call = 'X';
+    if (call === 'Redouble') call = 'XX';
+
+    // Handle Pass - always legal
+    if (call === 'Pass') {
+      return { ok: true };
+    }
+
+    // Handle numbered bids (1C through 7NT)
+    if (call.match(/^[1-7][CDHSNT]+$/)) {
+      const level = parseInt(call[0]);
+      const suit = call.substring(1);
+
+      // Validate bid format
+      if (level < 1 || level > 7) {
+        return { ok: false, error: `Invalid bid level: ${level}` };
+      }
+
+      const validSuits = ['C', 'D', 'H', 'S', 'NT'];
+      if (!validSuits.includes(suit)) {
+        return { ok: false, error: `Invalid bid suit: ${suit}` };
+      }
+
+      // Check if bid is higher than current highest bid
+      if (highestBid) {
+        const newBidValue = getBidValue(call);
+        const currentBidValue = getBidValue(highestBid.bid);
+        if (newBidValue <= currentBidValue) {
+          return { ok: false, error: `Illegal bid: not higher than current highest bid (${highestBid.bid})` };
+        }
+      }
+      return { ok: true };
+    }
+
+    // Handle Double (X)
+    if (call === 'X') {
+      // Must have a bid to double
+      if (!highestBid) {
+        return { ok: false, error: "Illegal double: no bid to double" };
+      }
+      // Cannot double if already doubled or redoubled
+      if (dblStatus !== '') {
+        return { ok: false, error: "Illegal double: current contract is already doubled or redoubled" };
+      }
+      // Check if opponents hold the current contract
+      const positions = ['W', 'N', 'E', 'S'];
+      const seatIndex = positions.indexOf(seat);
+      const bidderIndex = positions.indexOf(highestBid.seat);
+      const isOpponent = (seatIndex % 2) !== (bidderIndex % 2);
+      if (!isOpponent) {
+        return { ok: false, error: "Illegal double: opponents do not hold the current contract" };
+      }
+      return { ok: true };
+    }
+
+    // Handle Redouble (XX)
+    if (call === 'XX') {
+      // Must have a bid to redouble
+      if (!highestBid) {
+        return { ok: false, error: "Illegal redouble: no bid to redouble" };
+      }
+      // Can only redouble a doubled bid
+      if (dblStatus !== 'X') {
+        return { ok: false, error: "Illegal redouble: current contract is not doubled" };
+      }
+      // Check if current player's side holds the doubled contract
+      const positions = ['W', 'N', 'E', 'S'];
+      const seatIndex = positions.indexOf(seat);
+      const bidderIndex = positions.indexOf(highestBid.seat);
+      const isSameSide = (seatIndex % 2) === (bidderIndex % 2);
+      if (!isSameSide) {
+        return { ok: false, error: "Illegal redouble: your side is not currently doubled" };
+      }
+      return { ok: true };
+    }
+
+    return { ok: false, error: `Unknown call: ${call}` };
+  };
+
+  // Get auction state from current sequence
+  const getAuctionState = () => {
+    const positions = ['W', 'N', 'E', 'S'];
+    const dealer = currentDeal?.dealer || 'N';
+    let toActSeat = dealer;
+    let highestBid = null;
+    let dblStatus = '';
+    let consecutivePasses = 0;
+    let auctionEnded = false;
+    let finalContract = null;
+
+    // Process each call in sequence
+    for (let i = 0; i < userSequence.length; i++) {
+      const call = userSequence[i];
+      const callText = call.call;
+
+      // Normalize call format
+      let normalizedCall = callText;
+      if (normalizedCall === 'P') normalizedCall = 'Pass';
+      if (normalizedCall === 'Double') normalizedCall = 'X';
+      if (normalizedCall === 'Redouble') normalizedCall = 'XX';
+
+      // Update state based on the call
+      if (normalizedCall === 'Pass') {
+        consecutivePasses++;
+        // Check for auction end conditions
+        if (consecutivePasses === 4 && !highestBid) {
+          auctionEnded = true; // Passed out
+          finalContract = 'Passed Out';
+          break;
+        }
+        if (consecutivePasses === 3 && highestBid) {
+          auctionEnded = true; // Three passes after a bid
+          finalContract = highestBid.bid;
+          if (dblStatus) finalContract += dblStatus;
+          break;
+        }
+      } else {
+        consecutivePasses = 0; // Reset on any non-pass
+
+        if (normalizedCall.match(/^[1-7][CDHSNT]+$/)) {
+          // New bid
+          highestBid = { bid: normalizedCall, seat: call.position };
+          dblStatus = ''; // Reset double status on new bid
+        } else if (normalizedCall === 'X') {
+          dblStatus = 'X';
+        } else if (normalizedCall === 'XX') {
+          dblStatus = 'XX';
+        }
+      }
+
+      // Rotate to next seat
+      const currentIndex = positions.indexOf(toActSeat);
+      toActSeat = positions[(currentIndex + 1) % 4];
+    }
+
+    return {
+      toActSeat,
+      highestBid,
+      dblStatus,
+      consecutivePasses,
+      history: userSequence,
+      auctionEnded,
+      finalContract
+    };
   };
 
   const getSuitSymbol = (suit) => {
@@ -359,39 +487,30 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
       return <p>No bids yet. Dealer: {dealer} starts.</p>;
     }
 
-    // Standard bridge table columns: W-N-E-S
-    const positions = ['W', 'N', 'E', 'S'];
 
-    // Create the auction grid
-    const createAuctionGrid = (dealer, sequence) => {
-      const rows = [];
-      let currentRow = [null, null, null, null]; // W, N, E, S
-      let callsPlacedInRow = 0;
+    // Create the auction grid with proper dealer offset
+    const createAuctionGrid = (dealerSeat, sequence) => {
+      const cols = ['W', 'N', 'E', 'S'];
+      const startCol = cols.indexOf(dealerSeat);
+      const grid = [];
 
+      // Initialize grid with enough rows
+      const totalCalls = sequence.length;
+      const numRows = Math.ceil((startCol + totalCalls) / 4);
+
+      for (let i = 0; i < numRows; i++) {
+        grid.push([null, null, null, null]);
+      }
+
+      // Place each call in the grid
       for (let i = 0; i < sequence.length; i++) {
-        const call = sequence[i];
-        const callPosition = call.position;
-        const callColumnIndex = positions.indexOf(callPosition);
-
-        // Place the call
-        currentRow[callColumnIndex] = call;
-        callsPlacedInRow++;
-
-        // Check if we need a new row AFTER placing the call
-        if (callsPlacedInRow >= 4 && i < sequence.length - 1) {
-          // Row is full and there are more calls to place
-          rows.push([...currentRow]);
-          currentRow = [null, null, null, null];
-          callsPlacedInRow = 0;
-        }
+        const absIndex = startCol + i;
+        const row = Math.floor(absIndex / 4);
+        const col = absIndex % 4;
+        grid[row][col] = sequence[i];
       }
 
-      // Add the last row if it has any content
-      if (callsPlacedInRow > 0 || rows.length === 0) {
-        rows.push(currentRow);
-      }
-
-      return rows;
+      return grid;
     };
 
     const rows = createAuctionGrid(dealer, sequence);
@@ -463,7 +582,7 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
                   key={bid}
                   className={`bid-button suit-${suit === 'NT' ? 'nt' : suit.toLowerCase()}`}
                   onClick={() => makeCall(bid)}
-                  disabled={!isLegal || isLoading}
+                  disabled={!isLegal || isLoading || getAuctionState().auctionEnded}
                 >
                   <div className="bid-content">
                     {level}<br />{getSuitSymbol(suit)}
@@ -563,21 +682,21 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
               <button
                 className="special-call"
                 onClick={() => makeCall('Pass')}
-                disabled={isLoading}
+                disabled={isLoading || getAuctionState().auctionEnded}
               >
                 Pass
               </button>
               <button
                 className="special-call"
                 onClick={() => makeCall('X')}
-                disabled={isLoading}
+                disabled={isLoading || !isLegalBid('X')}
               >
                 Double (X)
               </button>
               <button
                 className="special-call"
                 onClick={() => makeCall('XX')}
-                disabled={isLoading}
+                disabled={isLoading || !isLegalBid('XX')}
               >
                 Redouble (XX)
               </button>
@@ -602,9 +721,6 @@ function GameAreaConnected({ session, onBackToSessions, onShowTreeView, onUpdate
       </div>
 
       <div className="game-controls">
-        <button className="create-session tree-btn" onClick={onShowTreeView}>
-          View Auction Tree
-        </button>
         {viewMode === 'practice' ? (
           <button
             className="create-session"
