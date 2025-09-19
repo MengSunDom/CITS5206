@@ -19,22 +19,6 @@ function BridgeGame({ currentUser, onLogout }) {
     }
   }, []);
 
-  // Simple function to create a new session
-  const createSession = (sessionData) => {
-    const newSession = {
-      id: Date.now(),
-      name: sessionData.name,
-      partner: sessionData.partner,
-      created: new Date().toISOString(),
-      deals: []
-    };
-    
-    const newSessionsList = [...sessions, newSession];
-    setSessions(newSessionsList);
-    localStorage.setItem('bridgeSessions', JSON.stringify(newSessionsList));
-    setShowCreateModal(false);
-  };
-
   // Simple function to enter a session
   const enterSession = (session) => {
     setCurrentSession(session);

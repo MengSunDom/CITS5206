@@ -132,3 +132,47 @@
   outline: none;
   border-color: #00d4ff;
 }
+
+/* Special bid buttons styles */
+.special-bid-button {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin: 5px;
+  color: white;
+}
+
+.special-bid-button.pass {
+  background-color: #6c757d;
+}
+
+.special-bid-button.pass:hover {
+  background-color: #5a6268;
+}
+
+.special-bid-button.double {
+  background-color: #dc3545;
+  color: white;
+}
+
+.special-bid-button.double:hover {
+  background-color: #c82333;
+}
+
+.special-bid-button.redouble {
+  background-color: #007bff;
+  color: white;
+}
+
+.special-bid-button.redouble:hover {
+  background-color: #0056b3;
+}
+
+.special-bid-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

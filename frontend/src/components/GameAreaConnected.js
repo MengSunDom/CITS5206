@@ -155,6 +155,10 @@ function GameAreaConnected({ session, onBackToSessions}) {
 
     if (!validation.ok) {
       setError(validation.error);
+      // Clear error after 3 seconds
+      setTimeout(() => {
+        setError('');
+      }, 3000);
       return;
     }
 
@@ -626,16 +630,19 @@ function GameAreaConnected({ session, onBackToSessions}) {
         <div
           className="error-message"
           style={{
-            color: error.startsWith('COMPLETION:') ? 'white' : 'red',
-            backgroundColor: error.startsWith('COMPLETION:') ? 'red' : 'transparent',
-            padding: error.startsWith('COMPLETION:') ? '15px' : '0',
-            borderRadius: error.startsWith('COMPLETION:') ? '5px' : '0',
-            fontWeight: error.startsWith('COMPLETION:') ? 'bold' : 'normal',
-            textAlign: error.startsWith('COMPLETION:') ? 'center' : 'left',
-            margin: '10px 0'
+            color: error.startsWith('COMPLETION:') ? 'white' : 'white',
+            backgroundColor: error.startsWith('COMPLETION:') ? '#28a745' : '#dc3545',
+            padding: '15px',
+            borderRadius: '5px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            margin: '10px 20px',
+            fontSize: '16px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            animation: 'slideDown 0.3s ease-in-out'
           }}
         >
-          {error.startsWith('COMPLETION:') ? error.replace('COMPLETION:', '') : error}
+          {error.startsWith('COMPLETION:') ? '✅ ' + error.replace('COMPLETION:', '') : `⚠️ ${error}`}
         </div>
       )}
 
