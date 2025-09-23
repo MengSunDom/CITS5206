@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Session, PlayerGame, Deal
+from .models import Session, PlayerGame, Deal, ForkDeal
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -51,3 +51,12 @@ class SessionSerializer(serializers.ModelSerializer):
             "id", "name", "creator", "partner", "create_at", "updated_at",
             "is_active", "dealer", "hands", "vulnerability", "player_games", "deals"
         ]
+
+class ForkDealSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ForkDeal
+        fields = [
+            'id', 'original_deal', 'dealer', 'vulnerability','hands',
+            'auction_history', 'is_complete','created_at'
+        ]
+        read_only_fields = ['id', 'created_at'] 

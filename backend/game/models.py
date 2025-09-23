@@ -166,3 +166,34 @@ class BidComment(models.Model):
 
     def __str__(self):
         return f"Comment by {self.user.username} on bid {self.bid_index}"
+
+class ForkDeal(models.Model):
+    """Create a new deal when there is difference between player's auction_history"""
+    original_deal = models.ForeignKey(
+        Deal, 
+        on_delete=models.CASCADE,
+        related_name='forks'
+    )
+    dealer = models.CharField(max_length=1, choices=position_choice)
+    vulnerability = models.CharField(max_length=20, choices=Deal.VULNERABILITY_CHOICES)
+    hands = models.JSONField(default=dict) 
+    auction_history = models.JSONField(default=list) 
+    is_complete = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['deal_number']
+
+    def __str__(self):
+        return f"ForkDeal {self.id} from Deal {self.original_deal.deal_number}"
+    
+    @classmethod
+    def create_from_deal(cls, deal, fork_index, new_bid):
+
+        return cls.objects.create(
+            original_deal=deal,
+            dealer=deal.dealer,
+            vulnerability=deal.vulnerability,
+            hands=deal.hands,
+            auction_history=deal.auction_history[:fork_index] + [new_bid],
+        )
