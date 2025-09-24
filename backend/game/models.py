@@ -175,14 +175,14 @@ class ForkDeal(models.Model):
         related_name='forks'
     )
     dealer = models.CharField(max_length=1, choices=position_choice)
-    vulnerability = models.CharField(max_length=20, choices=Deal.VULNERABILITY_CHOICES)
+    vulnerability = models.CharField(max_length=20, choices=Session.VULNERABILITY_CHOICES)
     hands = models.JSONField(default=dict) 
     auction_history = models.JSONField(default=list) 
     is_complete = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['deal_number']
+        ordering = ['created_at']
 
     def __str__(self):
         return f"ForkDeal {self.id} from Deal {self.original_deal.deal_number}"
