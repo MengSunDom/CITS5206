@@ -2,6 +2,49 @@ import React, { useState, useEffect } from 'react';
 import { sessionService } from '../utils/gameService';
 import './GameArea.css';
 
+// Card component defined within the same file
+const Card = ({ rank, suit, isBack = false, isVisible = true, className = '', onClick = null }) => {
+  const getSuitSymbol = (suit) => {
+    const symbols = {
+      'S': '♠',
+      'H': '♥',
+      'D': '♦',
+      'C': '♣'
+    };
+    return symbols[suit] || suit;
+  };
+
+  const getSuitColor = (suit) => {
+    return (suit === 'H' || suit === 'D') ? 'red' : 'black';
+  };
+
+  if (!isVisible) {
+    return null;
+  }
+
+  if (isBack) {
+    return (
+      <div className={`card-back ${className}`} onClick={onClick}>
+        {/* Card back pattern is handled by CSS */}
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className={`playing-card ${getSuitColor(suit)} ${className}`} 
+      onClick={onClick}
+    >
+      <div className="rank">{rank}</div>
+      <div className="suit">{getSuitSymbol(suit)}</div>
+      <div className="center-suit">{getSuitSymbol(suit)}</div>
+      <div className="rank bottom-right" style={{ transform: 'rotate(180deg)', alignSelf: 'flex-end', fontSize: '10px' }}>
+        {rank}
+      </div>
+    </div>
+  );
+};
+
 function GameAreaConnected({ session, onBackToSessions}) {
   const [currentDeal, setCurrentDeal] = useState(null);
   const [currentDealNumber, setCurrentDealNumber] = useState(null);
@@ -17,11 +60,73 @@ function GameAreaConnected({ session, onBackToSessions}) {
   const [viewMode, setViewMode] = useState('practice'); // 'practice' or 'history'
   const [dealHistory, setDealHistory] = useState([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
+  const [isBiddingPhase, setIsBiddingPhase] = useState(true);
+  const [gameTerminated, setGameTerminated] = useState(false);
+  
+  // Simulated deck for unique card distribution
+  const createDeck = () => {
+    const suits = ['S', 'H', 'D', 'C'];
+    const ranks = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3', '2'];
+    const deck = [];
+    
+    suits.forEach(suit => {
+      ranks.forEach(rank => {
+        deck.push(`${rank}${suit}`);
+      });
+    });
+    
+    return deck;
+  };
+
+  // Shuffle and deal cards properly
+  const dealCards = () => {
+    const deck = createDeck();
+    
+    // Shuffle deck
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    
+    // Deal 13 cards to each position
+    const hands = {
+      'N': { 'S': '', 'H': '', 'D': '', 'C': '' },
+      'E': { 'S': '', 'H': '', 'D': '', 'C': '' },
+      'S': { 'S': '', 'H': '', 'D': '', 'C': '' },
+      'W': { 'S': '', 'H': '', 'D': '', 'C': '' }
+    };
+    
+    const positions = ['N', 'E', 'S', 'W'];
+    let cardIndex = 0;
+    
+    // Deal one card at a time to each position (proper bridge dealing)
+    for (let round = 0; round < 13; round++) {
+      positions.forEach(position => {
+        const card = deck[cardIndex++];
+        const suit = card.slice(-1);
+        const rank = card.slice(0, -1);
+        hands[position][suit] += rank;
+      });
+    }
+    
+    // Sort each suit by rank
+    const rankOrder = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3', '2'];
+    Object.keys(hands).forEach(position => {
+      ['S', 'H', 'D', 'C'].forEach(suit => {
+        const cards = hands[position][suit];
+        const sortedCards = cards.match(/(?:10|[AKQJ2-9])/g) || [];
+        hands[position][suit] = sortedCards.sort((a, b) => 
+          rankOrder.indexOf(a) - rankOrder.indexOf(b)
+        ).join('');
+      });
+    });
+    
+    return hands;
+  };
 
   // Load initial deal from backend when component mounts
   useEffect(() => {
-    loadNextPractice();
-    // Get user's actual position from session
+    // Get user's actual position from session first
     if (session.player_games) {
       const currentUserGame = session.player_games.find(pg =>
         pg.player.email === localStorage.getItem('userEmail') ||
@@ -31,7 +136,31 @@ function GameAreaConnected({ session, onBackToSessions}) {
         setUserPosition(currentUserGame.position);
       }
     }
+    
+    // Initialize first deal
+    initializeNewDeal();
   }, [session.id]);
+
+  const initializeNewDeal = () => {
+    const newDealNumber = (currentDealNumber || 0) + 1;
+    const dealer = 'N'; // Always start with North as dealer for each game
+    const hands = dealCards();
+    
+    const newDeal = {
+      id: `deal-${newDealNumber}`,
+      deal_number: newDealNumber,
+      dealer: dealer,
+      vulnerability: 'None', // Simplified for now
+      hands: hands
+    };
+    
+    setCurrentDeal(newDeal);
+    setCurrentDealNumber(newDealNumber);
+    setCurrentBiddingPosition(dealer); // Bidding starts with dealer
+    setUserSequence([]);
+    setIsBiddingPhase(true);
+    setGameTerminated(false);
+  };
 
   const loadDealHistory = async () => {
     setIsLoading(true);
@@ -54,6 +183,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
         setCurrentDealNumber(firstDeal.deal_number);
         setUserSequence(firstDeal.sequence);
         setViewMode('history');
+        setIsBiddingPhase(false);
       } else {
         setError('No completed deals to review yet.');
       }
@@ -88,68 +218,25 @@ function GameAreaConnected({ session, onBackToSessions}) {
     setViewMode('practice');
     setDealHistory([]);
     setCurrentHistoryIndex(0);
-    loadNextPractice();
+    initializeNewDeal();
   };
 
-  const loadNextPractice = async () => {
-    setIsLoading(true);
+  const startNewGame = () => {
+    initializeNewDeal();
     setError('');
-
-    try {
-      const response = await sessionService.getNextPractice(session.id, currentDealNumber || 0);
-
-      if (response.completed) {
-        // Set special completion message
-        setError('COMPLETION:All deals completed! Great job!');
-        return;
-      }
-
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
-
-      // Set the deal and position from backend
-      setCurrentDeal(response.deal);
-      setCurrentDealNumber(response.deal.deal_number);
-      setCurrentBiddingPosition(response.position);
-      setUserSequence(response.user_sequence || []);
-      setTotalDeals(response.total_deals);
-      setAlertText('');
-    } catch (err) {
-      setError('Failed to load next practice. Please try again.');
-      console.error('Practice loading error:', err);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
-  // Helper function to rotate positions for display
-  const rotatePosition = (position) => {
-    // This function rotates the table so that the user always appears at South
+  // Get next bidding position
+  const getNextBiddingPosition = (currentPos) => {
     const positions = ['N', 'E', 'S', 'W'];
-    const userIdx = positions.indexOf(userPosition);
-    const posIdx = positions.indexOf(position);
-
-    // Calculate rotation needed to put user at South (index 2)
-    const rotation = (posIdx - userIdx + 2) % 4;
-    return positions[rotation];
-  };
-
-  // Get display positions after rotation
-  const getDisplayPositions = () => {
-    return {
-      'N': rotatePosition('N'),
-      'E': rotatePosition('E'),
-      'S': rotatePosition('S'),
-      'W': rotatePosition('W')
-    };
+    const currentIndex = positions.indexOf(currentPos);
+    return positions[(currentIndex + 1) % 4];
   };
 
   const makeCall = async (call) => {
-    if (!currentDeal) return;
+    if (!currentDeal || gameTerminated) return;
 
-    // Validate the call before sending to backend
+    // Validate the call before processing
     const auctionState = getAuctionState();
     const validation = validateCall(auctionState, call, currentBiddingPosition);
 
@@ -166,30 +253,36 @@ function GameAreaConnected({ session, onBackToSessions}) {
     setError('');
 
     try {
-      const response = await sessionService.makeUserCall(
-        session.id,
-        currentDeal.id,
-        currentBiddingPosition,
-        call,
-        alertText
-      );
+      // Add the call to the sequence
+      const newCall = {
+        position: currentBiddingPosition,
+        call: call,
+        alert: alertText || null
+      };
+      
+      const newSequence = [...userSequence, newCall];
+      setUserSequence(newSequence);
+      setAlertText('');
 
-      if (response.error) {
-        setError(response.error);
-      } else {
-        setUserSequence(response.user_sequence.sequence);
-        setAlertText('');
-
-        // Check if this deal's auction is complete
-        if (response.auction_complete) {
-          alert(`Deal #${currentDealNumber} has been completed!`);
+      // Check auction state after the call
+      const newAuctionState = getAuctionStateFromSequence(newSequence);
+      
+      // Move to next bidding position
+      const nextPosition = getNextBiddingPosition(currentBiddingPosition);
+      setCurrentBiddingPosition(nextPosition);
+      
+      // Check if auction has ended
+      if (newAuctionState.auctionEnded) {
+        setIsBiddingPhase(false);
+        setGameTerminated(true);
+        
+        if (newAuctionState.finalContract === 'Passed Out') {
+          setError('GAME_END:The game is terminated - All Passed!');
+        } else {
+          setError(`GAME_END:Game completed! Final contract: ${newAuctionState.finalContract}`);
         }
-
-        // Automatically get next deal/position from backend after each call
-        setTimeout(() => {
-          loadNextPractice();
-        }, 1000); // 1 second delay before auto-transition
       }
+
     } catch (err) {
       setError('Failed to make call. Please try again.');
       console.error('Call error:', err);
@@ -197,9 +290,6 @@ function GameAreaConnected({ session, onBackToSessions}) {
       setIsLoading(false);
     }
   };
-
-
-
 
   const isLegalBid = (bid) => {
     const auctionState = getAuctionState();
@@ -314,6 +404,11 @@ function GameAreaConnected({ session, onBackToSessions}) {
 
   // Get auction state from current sequence
   const getAuctionState = () => {
+    return getAuctionStateFromSequence(userSequence);
+  };
+
+  // Separate function to get auction state from any sequence
+  const getAuctionStateFromSequence = (sequence) => {
     const positions = ['W', 'N', 'E', 'S'];
     const dealer = currentDeal?.dealer || 'N';
     let toActSeat = dealer;
@@ -323,9 +418,22 @@ function GameAreaConnected({ session, onBackToSessions}) {
     let auctionEnded = false;
     let finalContract = null;
 
+    // If no calls yet, next to act is dealer
+    if (sequence.length === 0) {
+      return {
+        toActSeat: dealer,
+        highestBid: null,
+        dblStatus: '',
+        consecutivePasses: 0,
+        history: [],
+        auctionEnded: false,
+        finalContract: null
+      };
+    }
+
     // Process each call in sequence
-    for (let i = 0; i < userSequence.length; i++) {
-      const call = userSequence[i];
+    for (let i = 0; i < sequence.length; i++) {
+      const call = sequence[i];
       const callText = call.call;
 
       // Normalize call format
@@ -337,16 +445,19 @@ function GameAreaConnected({ session, onBackToSessions}) {
       // Update state based on the call
       if (normalizedCall === 'Pass') {
         consecutivePasses++;
-        // Check for auction end conditions
+        
+        // Bridge rules: 
+        // - 4 consecutive passes from start = all passed
+        // - 3 consecutive passes after any bid = auction ends
         if (consecutivePasses === 4 && !highestBid) {
-          auctionEnded = true; // Passed out
+          auctionEnded = true;
           finalContract = 'Passed Out';
           break;
         }
         if (consecutivePasses === 3 && highestBid) {
-          auctionEnded = true; // Three passes after a bid
+          auctionEnded = true;
           finalContract = highestBid.bid;
-          if (dblStatus) finalContract += dblStatus;
+          if (dblStatus) finalContract += ` ${dblStatus}`;
           break;
         }
       } else {
@@ -373,7 +484,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
       highestBid,
       dblStatus,
       consecutivePasses,
-      history: userSequence,
+      history: sequence,
       auctionEnded,
       finalContract
     };
@@ -390,92 +501,90 @@ function GameAreaConnected({ session, onBackToSessions}) {
     return symbols[suit] || suit;
   };
 
+  // Parse card string to get individual cards
+  const parseCards = (cardString) => {
+    if (!cardString) return [];
+    
+    const cards = [];
+    const matches = cardString.match(/(?:10|[AKQJ2-9])/g);
+    return matches || [];
+  };
+
+  // Should show card backs for other positions during bidding
+  const shouldShowCardBacks = (position) => {
+    return isBiddingPhase && position !== currentBiddingPosition && viewMode === 'practice';
+  };
+
+  // Generate card backs for a position
+  const generateCardBacks = (position) => {
+    if (!currentDeal || !currentDeal.hands || !currentDeal.hands[position]) return [];
+    
+    // Generate array of card backs (should be 13 cards)
+    return Array(13).fill().map((_, index) => (
+      <Card key={`back-${position}-${index}`} isBack={true} className="card-deal" />
+    ));
+  };
+
   const renderHands = () => {
     if (!currentDeal || !currentDeal.hands) {
       return <p>No hands dealt yet.</p>;
     }
 
-    const displayPositions = getDisplayPositions();
     const positionNames = {
       'N': 'North',
-      'E': 'East',
+      'E': 'East', 
       'S': 'South',
       'W': 'West'
     };
 
-    // Create rotated display with user always at South
-    const tablePositions = {
-      north: displayPositions['N'],
-      east: displayPositions['E'],
-      south: userPosition, // User's actual position shown at South
-      west: displayPositions['W']
+    const renderPositionCards = (actualPosition, displayClass) => {
+      const isCurrentBidder = currentBiddingPosition === actualPosition;
+      const positionClasses = `position ${displayClass} ${isCurrentBidder ? 'current-bidder' : ''} ${shouldShowCardBacks(actualPosition) ? 'hidden-cards' : ''}`;
+
+      return (
+        <div key={actualPosition} className={positionClasses}>
+          <div className="position-label">
+            {positionNames[actualPosition]}
+            {actualPosition === userPosition && <span style={{color: '#ffd700', marginLeft: '5px'}}>(You)</span>}
+            {isCurrentBidder && <span style={{color: '#00d4ff', marginLeft: '10px'}}>• Bidding</span>}
+          </div>
+          
+          <div className="cards-container">
+            {shouldShowCardBacks(actualPosition) ? (
+              // Show card backs during bidding phase for positions not currently bidding
+              generateCardBacks(actualPosition)
+            ) : (
+              // Show actual cards for the current bidding position or when not in bidding phase
+              currentDeal.hands[actualPosition] && Object.entries(currentDeal.hands[actualPosition]).map(([suit, cards]) => (
+                <div key={suit} className="suit-row">
+                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
+                    {getSuitSymbol(suit)}
+                  </span>
+                  <div className="cards-in-suit">
+                    {parseCards(cards).map((rank, index) => (
+                      <Card 
+                        key={`${suit}-${rank}-${index}`}
+                        rank={rank}
+                        suit={suit}
+                        className="card-deal"
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      );
     };
 
     return (
-      <div className="bridge-table">
-        {/* North position (top) */}
-        <div className="position north">
-          <div className="position-label">
-            {tablePositions.north === userPosition ? `${positionNames[tablePositions.north]} (Partner)` : positionNames[tablePositions.north]}
-          </div>
-          <div className="cards">
-            {currentDeal.hands[tablePositions.north] && Object.entries(currentDeal.hands[tablePositions.north]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* West position (left) */}
-        <div className="position west">
-          <div className="position-label">{positionNames[tablePositions.west]}</div>
-          <div className="cards">
-            {currentDeal.hands[tablePositions.west] && Object.entries(currentDeal.hands[tablePositions.west]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* East position (right) */}
-        <div className="position east">
-          <div className="position-label">{positionNames[tablePositions.east]}</div>
-          <div className="cards">
-            {currentDeal.hands[tablePositions.east] && Object.entries(currentDeal.hands[tablePositions.east]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* South position (bottom) - Always the user */}
-        <div className="position south">
-          <div className="position-label">
-            {positionNames[userPosition]} (You)
-          </div>
-          <div className="cards">
-            {currentDeal.hands[userPosition] && Object.entries(currentDeal.hands[userPosition]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className={`bridge-table ${isBiddingPhase ? 'bidding-view' : ''}`}>
+        {/* Fixed position rendering - each position renders correctly */}
+        {renderPositionCards('N', 'north')}
+        {renderPositionCards('W', 'west')}
+        {renderPositionCards('E', 'east')}
+        {renderPositionCards('S', 'south')}
       </div>
     );
   };
@@ -490,7 +599,6 @@ function GameAreaConnected({ session, onBackToSessions}) {
     if (!sequence || sequence.length === 0) {
       return <p>No bids yet. Dealer: {dealer} starts.</p>;
     }
-
 
     // Create the auction grid with proper dealer offset
     const createAuctionGrid = (dealerSeat, sequence) => {
@@ -522,7 +630,9 @@ function GameAreaConnected({ session, onBackToSessions}) {
     // Format bid with suit symbols
     const formatBid = (bid) => {
       if (!bid) return bid;
-      if (bid === 'Pass' || bid === 'X' || bid === 'XX') return bid;
+      if (bid === 'Pass' || bid === 'P') return 'Pass';
+      if (bid === 'X') return 'Dbl';
+      if (bid === 'XX') return 'Rdbl';
 
       // Replace suit letters with symbols for numbered bids
       if (bid.match(/^[1-7]/)) {
@@ -570,30 +680,35 @@ function GameAreaConnected({ session, onBackToSessions}) {
   };
 
   const renderBidButtons = () => {
+    if (gameTerminated || !isBiddingPhase) return null;
+    
     const levels = ['1', '2', '3', '4', '5', '6', '7'];
     const suits = ['C', 'D', 'H', 'S', 'NT'];
 
     return (
-      <div className="bid-buttons">
+      <div className="bid-buttons-container">
         {levels.map(level => (
-          <div key={level} className="bid-row">
-            {suits.map(suit => {
-              const bid = level + suit;
-              const isLegal = isLegalBid(bid);
+          <div key={level} className="bid-level-row">
+            <div className="level-label">{level}</div>
+            <div className="suit-buttons">
+              {suits.map(suit => {
+                const bid = level + suit;
+                const isLegal = isLegalBid(bid);
 
-              return (
-                <button
-                  key={bid}
-                  className={`bid-button suit-${suit === 'NT' ? 'nt' : suit.toLowerCase()}`}
-                  onClick={() => makeCall(bid)}
-                  disabled={!isLegal || isLoading || getAuctionState().auctionEnded}
-                >
-                  <div className="bid-content">
-                    {level}<br />{getSuitSymbol(suit)}
-                  </div>
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={bid}
+                    className={`bid-button suit-${suit === 'NT' ? 'nt' : suit.toLowerCase()} ${!isLegal ? 'disabled' : ''}`}
+                    onClick={() => makeCall(bid)}
+                    disabled={!isLegal || isLoading}
+                  >
+                    <div className="bid-content">
+                      <span className="bid-suit">{getSuitSymbol(suit)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
@@ -605,7 +720,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
   }
 
   return (
-    <div className="game-area">
+    <div className={`game-area ${isBiddingPhase ? 'bidding-view' : ''}`}>
       <div className="game-header" style={{ position: 'relative' }}>
         <button className="back-btn" onClick={onBackToSessions}>
           ← Back to Sessions
@@ -630,8 +745,8 @@ function GameAreaConnected({ session, onBackToSessions}) {
         <div
           className="error-message"
           style={{
-            color: error.startsWith('COMPLETION:') ? 'white' : 'white',
-            backgroundColor: error.startsWith('COMPLETION:') ? '#28a745' : '#dc3545',
+            color: 'white',
+            backgroundColor: error.startsWith('GAME_END:') ? '#28a745' : '#dc3545',
             padding: '15px',
             borderRadius: '5px',
             fontWeight: 'bold',
@@ -642,22 +757,48 @@ function GameAreaConnected({ session, onBackToSessions}) {
             animation: 'slideDown 0.3s ease-in-out'
           }}
         >
-          {error.startsWith('COMPLETION:') ? '✅ ' + error.replace('COMPLETION:', '') : `⚠️ ${error}`}
+          {error.startsWith('GAME_END:') ? 
+            '✅ ' + error.replace('GAME_END:', '') : 
+            `⚠️ ${error}`
+          }
+          {error.startsWith('GAME_END:') && (
+            <div style={{ marginTop: '10px' }}>
+              <button 
+                onClick={startNewGame}
+                style={{
+                  background: '#ffffff',
+                  color: '#28a745',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Start New Game
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="game-info">
+      {/* Elevated Game Info to avoid overlap */}
+      <div className="game-info elevated">
         <div className="info-card">
           <h3>Dealer</h3>
           <div className="value">{currentDeal?.dealer || '-'}</div>
         </div>
         <div className="info-card">
-          <h3>Vulnerability</h3>
-          <div className="value">{currentDeal?.vulnerability || '-'}</div>
+          <h3>Deal #</h3>
+          <div className="value">{currentDealNumber || '-'}</div>
         </div>
         <div className="info-card">
-          <h3>Bidding As</h3>
+          <h3>Current Turn</h3>
           <div className="value">{currentBiddingPosition || '-'}</div>
+        </div>
+        <div className="info-card">
+          <h3>Your Position</h3>
+          <div className="value">{userPosition || '-'}</div>
         </div>
       </div>
 
@@ -674,6 +815,47 @@ function GameAreaConnected({ session, onBackToSessions}) {
             <>
               <h3>Make Your Call (Position: {currentBiddingPosition})</h3>
               {renderBidButtons()}
+              
+              {!gameTerminated && isBiddingPhase && (
+                <div className="special-calls">
+                  <button
+                    className="special-call pass"
+                    onClick={() => makeCall('Pass')}
+                    disabled={isLoading}
+                  >
+                    Pass
+                  </button>
+                  <button
+                    className="special-call double"
+                    onClick={() => makeCall('X')}
+                    disabled={isLoading || !isLegalBid('X')}
+                  >
+                    Double
+                  </button>
+                  <button
+                    className="special-call redouble"
+                    onClick={() => makeCall('XX')}
+                    disabled={isLoading || !isLegalBid('XX')}
+                  >
+                    Redouble
+                  </button>
+                </div>
+              )}
+
+              {!gameTerminated && isBiddingPhase && (
+                <div className="alert-section">
+                  <label htmlFor="alertText">Alert (optional):</label>
+                  <input
+                    type="text"
+                    id="alertText"
+                    className="alert-input"
+                    placeholder="Explain your call..."
+                    value={alertText}
+                    onChange={(e) => setAlertText(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <div style={{ padding: '20px', textAlign: 'center' }}>
@@ -683,63 +865,33 @@ function GameAreaConnected({ session, onBackToSessions}) {
               </p>
             </div>
           )}
-
-          {viewMode === 'practice' && (
-            <div className="special-calls">
-              <button
-                className="special-call"
-                onClick={() => makeCall('Pass')}
-                disabled={isLoading || getAuctionState().auctionEnded}
-              >
-                Pass
-              </button>
-              <button
-                className="special-call"
-                onClick={() => makeCall('X')}
-                disabled={isLoading || !isLegalBid('X')}
-              >
-                Double (X)
-              </button>
-              <button
-                className="special-call"
-                onClick={() => makeCall('XX')}
-                disabled={isLoading || !isLegalBid('XX')}
-              >
-                Redouble (XX)
-              </button>
-            </div>
-          )}
-
-          {viewMode === 'practice' && (
-            <div className="alert-section">
-              <label htmlFor="alertText">Alert (optional):</label>
-              <input
-                type="text"
-                id="alertText"
-                className="alert-input"
-                placeholder="Explain your call..."
-                value={alertText}
-                onChange={(e) => setAlertText(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-          )}
         </div>
       </div>
 
       <div className="game-controls">
         {viewMode === 'practice' ? (
-          <button
-            className="create-session"
-            onClick={() => {
-              // Switch to history view
-              loadDealHistory();
-            }}
-            disabled={isLoading}
-            style={{ padding: '10px 20px' }}
-          >
-            📜 View History
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              className="create-session"
+              onClick={() => {
+                loadDealHistory();
+              }}
+              disabled={isLoading}
+              style={{ padding: '10px 20px' }}
+            >
+              📜 View History
+            </button>
+            {gameTerminated && (
+              <button
+                className="create-session"
+                onClick={startNewGame}
+                disabled={isLoading}
+                style={{ padding: '10px 20px', background: '#28a745' }}
+              >
+                🔄 New Game
+              </button>
+            )}
+          </div>
         ) : (
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
