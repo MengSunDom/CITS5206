@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { sessionService } from '../utils/gameService';
 import './GameArea.css';
 
+
 function GameAreaConnected({ session, onBackToSessions}) {
   const [currentDeal, setCurrentDeal] = useState(null);
   const [currentDealNumber, setCurrentDealNumber] = useState(null);
@@ -18,6 +19,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
   const [dealHistory, setDealHistory] = useState([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
 
+
   // Load initial deal from backend when component mounts
   useEffect(() => {
     loadNextPractice();
@@ -33,17 +35,21 @@ function GameAreaConnected({ session, onBackToSessions}) {
     }
   }, [session.id]);
 
+
   const loadDealHistory = async () => {
     setIsLoading(true);
     setError('');
 
+
     try {
       const response = await sessionService.getDealHistory(session.id);
+
 
       if (response.error) {
         setError(response.error);
         return;
       }
+
 
       if (response.history && response.history.length > 0) {
         setDealHistory(response.history);
@@ -65,8 +71,10 @@ function GameAreaConnected({ session, onBackToSessions}) {
     }
   };
 
+
   const navigateHistory = (direction) => {
     if (dealHistory.length === 0) return;
+
 
     let newIndex = currentHistoryIndex;
     if (direction === 'next' && currentHistoryIndex < dealHistory.length - 1) {
@@ -74,6 +82,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
     } else if (direction === 'prev' && currentHistoryIndex > 0) {
       newIndex = currentHistoryIndex - 1;
     }
+
 
     if (newIndex !== currentHistoryIndex) {
       setCurrentHistoryIndex(newIndex);
@@ -84,6 +93,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
     }
   };
 
+
   const returnToPractice = () => {
     setViewMode('practice');
     setDealHistory([]);
@@ -91,12 +101,15 @@ function GameAreaConnected({ session, onBackToSessions}) {
     loadNextPractice();
   };
 
+
   const loadNextPractice = async () => {
     setIsLoading(true);
     setError('');
 
+
     try {
       const response = await sessionService.getNextPractice(session.id, currentDealNumber || 0);
+
 
       if (response.completed) {
         // Set special completion message
@@ -104,10 +117,12 @@ function GameAreaConnected({ session, onBackToSessions}) {
         return;
       }
 
+
       if (response.error) {
         setError(response.error);
         return;
       }
+
 
       // Set the deal and position from backend
       setCurrentDeal(response.deal);
@@ -124,6 +139,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
     }
   };
 
+
   // Helper function to rotate positions for display
   const rotatePosition = (position) => {
     // This function rotates the table so that the user always appears at South
@@ -131,10 +147,12 @@ function GameAreaConnected({ session, onBackToSessions}) {
     const userIdx = positions.indexOf(userPosition);
     const posIdx = positions.indexOf(position);
 
+
     // Calculate rotation needed to put user at South (index 2)
     const rotation = (posIdx - userIdx + 2) % 4;
     return positions[rotation];
   };
+
 
   // Get display positions after rotation
   const getDisplayPositions = () => {
@@ -146,12 +164,15 @@ function GameAreaConnected({ session, onBackToSessions}) {
     };
   };
 
+
   const makeCall = async (call) => {
     if (!currentDeal) return;
+
 
     // Validate the call before sending to backend
     const auctionState = getAuctionState();
     const validation = validateCall(auctionState, call, currentBiddingPosition);
+
 
     if (!validation.ok) {
       setError(validation.error);
@@ -162,8 +183,10 @@ function GameAreaConnected({ session, onBackToSessions}) {
       return;
     }
 
+
     setIsLoading(true);
     setError('');
+
 
     try {
       const response = await sessionService.makeUserCall(
@@ -174,16 +197,19 @@ function GameAreaConnected({ session, onBackToSessions}) {
         alertText
       );
 
+
       if (response.error) {
         setError(response.error);
       } else {
         setUserSequence(response.user_sequence.sequence);
         setAlertText('');
 
+
         // Check if this deal's auction is complete
         if (response.auction_complete) {
           alert(`Deal #${currentDealNumber} has been completed!`);
         }
+
 
         // Automatically get next deal/position from backend after each call
         setTimeout(() => {
@@ -199,62 +225,72 @@ function GameAreaConnected({ session, onBackToSessions}) {
   };
 
 
-
-
   const isLegalBid = (bid) => {
     const auctionState = getAuctionState();
     const validation = validateCall(auctionState, bid, currentBiddingPosition);
     return validation.ok;
   };
 
+
   const getBidValue = (bid) => {
     if (!bid.match(/^[1-7][CDHSNT]+$/)) return -1;
+
 
     const level = parseInt(bid[0]);
     const suit = bid.substring(1);
     const suitValues = { 'C': 0, 'D': 1, 'H': 2, 'S': 3, 'NT': 4 };
 
+
     return level * 5 + suitValues[suit];
   };
+
 
   // Complete bridge auction validation function
   const validateCall = (auctionState, call, seat) => {
     const { toActSeat, highestBid, dblStatus, auctionEnded } = auctionState;
+
 
     // Check if auction has already ended
     if (auctionEnded) {
       return { ok: false, error: "Auction already ended" };
     }
 
+
     // Check if it's the correct seat's turn
     if (seat !== toActSeat) {
       return { ok: false, error: `It's ${toActSeat}'s turn to act, not ${seat}'s` };
     }
+
 
     // Normalize call format
     if (call === 'P') call = 'Pass';
     if (call === 'Double') call = 'X';
     if (call === 'Redouble') call = 'XX';
 
+
     // Handle Pass - always legal
     if (call === 'Pass') {
       return { ok: true };
     }
+
 
     // Handle numbered bids (1C through 7NT)
     if (call.match(/^[1-7][CDHSNT]+$/)) {
       const level = parseInt(call[0]);
       const suit = call.substring(1);
 
+
       // Validate bid format
       if (level < 1 || level > 7) {
         return { ok: false, error: `Invalid bid level: ${level}` };
       }
 
+
       const validSuits = ['C', 'D', 'H', 'S', 'NT'];
       if (!validSuits.includes(suit)) {
         return { ok: false, error: `Invalid bid suit: ${suit}` };
       }
+
 
       // Check if bid is higher than current highest bid
       if (highestBid) {
@@ -266,6 +302,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
       }
       return { ok: true };
     }
+
 
     // Handle Double (X)
     if (call === 'X') {
@@ -288,6 +325,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
       return { ok: true };
     }
 
+
     // Handle Redouble (XX)
     if (call === 'XX') {
       // Must have a bid to redouble
@@ -309,8 +347,10 @@ function GameAreaConnected({ session, onBackToSessions}) {
       return { ok: true };
     }
 
+
     return { ok: false, error: `Unknown call: ${call}` };
   };
+
 
   // Get auction state from current sequence
   const getAuctionState = () => {
@@ -323,16 +363,19 @@ function GameAreaConnected({ session, onBackToSessions}) {
     let auctionEnded = false;
     let finalContract = null;
 
+
     // Process each call in sequence
     for (let i = 0; i < userSequence.length; i++) {
       const call = userSequence[i];
       const callText = call.call;
+
 
       // Normalize call format
       let normalizedCall = callText;
       if (normalizedCall === 'P') normalizedCall = 'Pass';
       if (normalizedCall === 'Double') normalizedCall = 'X';
       if (normalizedCall === 'Redouble') normalizedCall = 'XX';
+
 
       // Update state based on the call
       if (normalizedCall === 'Pass') {
@@ -352,6 +395,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
       } else {
         consecutivePasses = 0; // Reset on any non-pass
 
+
         if (normalizedCall.match(/^[1-7][CDHSNT]+$/)) {
           // New bid
           highestBid = { bid: normalizedCall, seat: call.position };
@@ -363,10 +407,12 @@ function GameAreaConnected({ session, onBackToSessions}) {
         }
       }
 
+
       // Rotate to next seat
       const currentIndex = positions.indexOf(toActSeat);
       toActSeat = positions[(currentIndex + 1) % 4];
     }
+
 
     return {
       toActSeat,
@@ -379,6 +425,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
     };
   };
 
+
   const getSuitSymbol = (suit) => {
     const symbols = {
       'S': '♠',
@@ -390,10 +437,57 @@ function GameAreaConnected({ session, onBackToSessions}) {
     return symbols[suit] || suit;
   };
 
+  // FIXED: Function to properly parse cards string and handle "10" as literal "10"
+  const parseCards = (cardsString) => {
+    if (!cardsString) return [];
+    
+    const cards = [];
+    let i = 0;
+    
+    while (i < cardsString.length) {
+      // Check if we have "10" (two characters)
+      if (i < cardsString.length - 1 && cardsString[i] === '1' && cardsString[i + 1] === '0') {
+        cards.push('10');
+        i += 2; // Skip both '1' and '0'
+      }
+      // Check if we have "T" (representing 10)
+      else if (cardsString[i] === 'T') {
+        cards.push('10');
+        i++;
+      }
+      // Handle other single character cards
+      else {
+        cards.push(cardsString[i]);
+        i++;
+      }
+    }
+    
+    return cards;
+  };
+
+  // Function to sort cards in proper order
+  const sortCards = (cardsString) => {
+    if (!cardsString) return [];
+    
+    // Define card order for sorting (10 included in proper position)
+    const cardOrder = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3', '2'];
+    
+    // Use the parseCards function to properly handle "10"
+    const cards = parseCards(cardsString);
+    
+    return cards.sort((a, b) => {
+      const aIndex = cardOrder.indexOf(a);
+      const bIndex = cardOrder.indexOf(b);
+      return aIndex - bIndex;
+    });
+  };
+
+
   const renderHands = () => {
     if (!currentDeal || !currentDeal.hands) {
       return <p>No hands dealt yet.</p>;
     }
+
 
     const displayPositions = getDisplayPositions();
     const positionNames = {
@@ -403,6 +497,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
       'W': 'West'
     };
 
+
     // Create rotated display with user always at South
     const tablePositions = {
       north: displayPositions['N'],
@@ -411,85 +506,193 @@ function GameAreaConnected({ session, onBackToSessions}) {
       west: displayPositions['W']
     };
 
+
     return (
       <div className="bridge-table">
         {/* North position (top) */}
-        <div className="position north">
+        <div className={`position north ${currentBiddingPosition === tablePositions.north ? 'current-bidder' : ''}`}>
           <div className="position-label">
             {tablePositions.north === userPosition ? `${positionNames[tablePositions.north]} (Partner)` : positionNames[tablePositions.north]}
+            {currentBiddingPosition === tablePositions.north && <span className="bidding-indicator">🎯</span>}
           </div>
           <div className="cards">
-            {currentDeal.hands[tablePositions.north] && Object.entries(currentDeal.hands[tablePositions.north]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
+            {(currentBiddingPosition === tablePositions.north || viewMode === 'history') ? (
+              currentDeal.hands[tablePositions.north] && Object.entries(currentDeal.hands[tablePositions.north]).map(([suit, cards]) => (
+                <div key={suit} className="suit-row">
+                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
+                    {getSuitSymbol(suit)}
+                  </span>
+                  <div className="cards-list">
+                    {sortCards(cards).map((card, index) => {
+                      const suitSymbol = getSuitSymbol(suit);
+                      const isRed = suit === 'H' || suit === 'D';
+                      return (
+                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
+                          <div className="card-content">
+                            <span className="card-value">{card}</span>
+                            <span className="card-suit">{suitSymbol}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="card-back-container">
+                {[...Array(13)].map((_, i) => (
+                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="card-pattern"></div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
+
 
         {/* West position (left) */}
-        <div className="position west">
-          <div className="position-label">{positionNames[tablePositions.west]}</div>
+        <div className={`position west ${currentBiddingPosition === tablePositions.west ? 'current-bidder' : ''}`}>
+          <div className="position-label">
+            {positionNames[tablePositions.west]}
+            {currentBiddingPosition === tablePositions.west && <span className="bidding-indicator">🎯</span>}
+          </div>
           <div className="cards">
-            {currentDeal.hands[tablePositions.west] && Object.entries(currentDeal.hands[tablePositions.west]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
+            {(currentBiddingPosition === tablePositions.west || viewMode === 'history') ? (
+              currentDeal.hands[tablePositions.west] && Object.entries(currentDeal.hands[tablePositions.west]).map(([suit, cards]) => (
+                <div key={suit} className="suit-row">
+                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
+                    {getSuitSymbol(suit)}
+                  </span>
+                  <div className="cards-list">
+                    {sortCards(cards).map((card, index) => {
+                      const suitSymbol = getSuitSymbol(suit);
+                      const isRed = suit === 'H' || suit === 'D';
+                      return (
+                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
+                          <div className="card-content">
+                            <span className="card-value">{card}</span>
+                            <span className="card-suit">{suitSymbol}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="card-back-container">
+                {[...Array(13)].map((_, i) => (
+                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="card-pattern"></div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
+
 
         {/* East position (right) */}
-        <div className="position east">
-          <div className="position-label">{positionNames[tablePositions.east]}</div>
+        <div className={`position east ${currentBiddingPosition === tablePositions.east ? 'current-bidder' : ''}`}>
+          <div className="position-label">
+            {positionNames[tablePositions.east]}
+            {currentBiddingPosition === tablePositions.east && <span className="bidding-indicator">🎯</span>}
+          </div>
           <div className="cards">
-            {currentDeal.hands[tablePositions.east] && Object.entries(currentDeal.hands[tablePositions.east]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
+            {(currentBiddingPosition === tablePositions.east || viewMode === 'history') ? (
+              currentDeal.hands[tablePositions.east] && Object.entries(currentDeal.hands[tablePositions.east]).map(([suit, cards]) => (
+                <div key={suit} className="suit-row">
+                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
+                    {getSuitSymbol(suit)}
+                  </span>
+                  <div className="cards-list">
+                    {sortCards(cards).map((card, index) => {
+                      const suitSymbol = getSuitSymbol(suit);
+                      const isRed = suit === 'H' || suit === 'D';
+                      return (
+                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
+                          <div className="card-content">
+                            <span className="card-value">{card}</span>
+                            <span className="card-suit">{suitSymbol}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="card-back-container">
+                {[...Array(13)].map((_, i) => (
+                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="card-pattern"></div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
 
-        {/* South position (bottom) - Always the user */}
-        <div className="position south">
+
+        {/* South position (bottom) - User position but only show cards when it's their turn or in history mode */}
+        <div className={`position south ${currentBiddingPosition === userPosition ? 'current-bidder' : ''}`}>
           <div className="position-label">
             {positionNames[userPosition]} (You)
+            {currentBiddingPosition === userPosition && <span className="bidding-indicator">🎯</span>}
           </div>
           <div className="cards">
-            {currentDeal.hands[userPosition] && Object.entries(currentDeal.hands[userPosition]).map(([suit, cards]) => (
-              <div key={suit} className="suit-row">
-                <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                  {getSuitSymbol(suit)}
-                </span>
-                <span className="cards-list">{cards}</span>
+            {(currentBiddingPosition === userPosition || viewMode === 'history') ? (
+              currentDeal.hands[userPosition] && Object.entries(currentDeal.hands[userPosition]).map(([suit, cards]) => (
+                <div key={suit} className="suit-row">
+                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
+                    {getSuitSymbol(suit)}
+                  </span>
+                  <div className="cards-list">
+                    {sortCards(cards).map((card, index) => {
+                      const suitSymbol = getSuitSymbol(suit);
+                      const isRed = suit === 'H' || suit === 'D';
+                      return (
+                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
+                          <div className="card-content">
+                            <span className="card-value">{card}</span>
+                            <span className="card-suit">{suitSymbol}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="card-back-container">
+                {[...Array(13)].map((_, i) => (
+                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="card-pattern"></div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
     );
   };
 
+
   const renderAuctionHistory = () => {
     // Show user's own sequence
     const sequence = userSequence;
 
+
     // Get dealer from currentDeal
     const dealer = currentDeal?.dealer || 'N';
+
 
     if (!sequence || sequence.length === 0) {
       return <p>No bids yet. Dealer: {dealer} starts.</p>;
     }
+
 
 
     // Create the auction grid with proper dealer offset
@@ -498,13 +701,16 @@ function GameAreaConnected({ session, onBackToSessions}) {
       const startCol = cols.indexOf(dealerSeat);
       const grid = [];
 
+
       // Initialize grid with enough rows
       const totalCalls = sequence.length;
       const numRows = Math.ceil((startCol + totalCalls) / 4);
 
+
       for (let i = 0; i < numRows; i++) {
         grid.push([null, null, null, null]);
       }
+
 
       // Place each call in the grid
       for (let i = 0; i < sequence.length; i++) {
@@ -514,15 +720,19 @@ function GameAreaConnected({ session, onBackToSessions}) {
         grid[row][col] = sequence[i];
       }
 
+
       return grid;
     };
 
+
     const rows = createAuctionGrid(dealer, sequence);
+
 
     // Format bid with suit symbols
     const formatBid = (bid) => {
       if (!bid) return bid;
       if (bid === 'Pass' || bid === 'X' || bid === 'XX') return bid;
+
 
       // Replace suit letters with symbols for numbered bids
       if (bid.match(/^[1-7]/)) {
@@ -540,38 +750,43 @@ function GameAreaConnected({ session, onBackToSessions}) {
       return bid;
     };
 
+
     return (
-      <div className="auction-table">
-        <div className="auction-header">West</div>
-        <div className="auction-header">North</div>
-        <div className="auction-header">East</div>
-        <div className="auction-header">South</div>
-        {rows.map((row, rowIndex) => (
-          row.map((cell, colIndex) => (
-            <div key={`${rowIndex}-${colIndex}`} className="auction-cell">
-              {cell ? (
-                <>
-                  <span
-                    className={`call-text ${cell.call && cell.call.match(/^[1-7]/) ? 'bid' : ''}`}
-                    data-call={cell.call}
-                  >
-                    {formatBid(cell.call)}
-                  </span>
-                  {cell.alert && <span className="alert-indicator">✱</span>}
-                </>
-              ) : (
-                ''
-              )}
-            </div>
-          ))
-        ))}
+      <div className="auction-container">
+        <div className="auction-table">
+          <div className="auction-header">West</div>
+          <div className="auction-header">North</div>
+          <div className="auction-header">East</div>
+          <div className="auction-header">South</div>
+          {rows.map((row, rowIndex) => (
+            row.map((cell, colIndex) => (
+              <div key={`${rowIndex}-${colIndex}`} className={`auction-cell ${cell ? 'has-call' : ''}`}>
+                {cell ? (
+                  <div className="auction-call-container">
+                    <span
+                      className={`call-text ${cell.call && cell.call.match(/^[1-7]/) ? 'bid' : ''}`}
+                      data-call={cell.call}
+                    >
+                      {formatBid(cell.call)}
+                    </span>
+                    {cell.alert && <span className="alert-indicator">✱</span>}
+                  </div>
+                ) : (
+                  <span className="empty-cell">-</span>
+                )}
+              </div>
+            ))
+          ))}
+        </div>
       </div>
     );
   };
 
+
   const renderBidButtons = () => {
     const levels = ['1', '2', '3', '4', '5', '6', '7'];
     const suits = ['C', 'D', 'H', 'S', 'NT'];
+
 
     return (
       <div className="bid-buttons">
@@ -581,15 +796,17 @@ function GameAreaConnected({ session, onBackToSessions}) {
               const bid = level + suit;
               const isLegal = isLegalBid(bid);
 
+
               return (
                 <button
                   key={bid}
-                  className={`bid-button suit-${suit === 'NT' ? 'nt' : suit.toLowerCase()}`}
+                  className={`bid-button suit-${suit === 'NT' ? 'nt' : suit.toLowerCase()} ${isLegal ? 'legal' : 'illegal'}`}
                   onClick={() => makeCall(bid)}
                   disabled={!isLegal || isLoading || getAuctionState().auctionEnded}
                 >
                   <div className="bid-content">
-                    {level}<br />{getSuitSymbol(suit)}
+                    <span className="bid-level">{level}</span>
+                    <span className="bid-suit">{getSuitSymbol(suit)}</span>
                   </div>
                 </button>
               );
@@ -600,9 +817,11 @@ function GameAreaConnected({ session, onBackToSessions}) {
     );
   };
 
+
   if (isLoading && !currentDeal) {
     return <div className="loading">Loading deal...</div>;
   }
+
 
   return (
     <div className="game-area">
@@ -626,6 +845,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
         </div>
       </div>
 
+
       {error && (
         <div
           className="error-message"
@@ -646,6 +866,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
         </div>
       )}
 
+
       <div className="game-info">
         <div className="info-card">
           <h3>Dealer</h3>
@@ -661,13 +882,16 @@ function GameAreaConnected({ session, onBackToSessions}) {
         </div>
       </div>
 
+
       {renderHands()}
+
 
       <div className="bidding-area">
         <div className="auction-history">
           <h3>Auction History</h3>
           {renderAuctionHistory()}
         </div>
+
 
         <div className="bid-controls">
           {viewMode === 'practice' ? (
@@ -684,24 +908,25 @@ function GameAreaConnected({ session, onBackToSessions}) {
             </div>
           )}
 
+
           {viewMode === 'practice' && (
             <div className="special-calls">
               <button
-                className="special-call"
+                className="special-call pass-btn"
                 onClick={() => makeCall('Pass')}
                 disabled={isLoading || getAuctionState().auctionEnded}
               >
                 Pass
               </button>
               <button
-                className="special-call"
+                className="special-call double-btn"
                 onClick={() => makeCall('X')}
                 disabled={isLoading || !isLegalBid('X')}
               >
                 Double (X)
               </button>
               <button
-                className="special-call"
+                className="special-call redouble-btn"
                 onClick={() => makeCall('XX')}
                 disabled={isLoading || !isLegalBid('XX')}
               >
@@ -709,6 +934,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
               </button>
             </div>
           )}
+
 
           {viewMode === 'practice' && (
             <div className="alert-section">
@@ -726,6 +952,7 @@ function GameAreaConnected({ session, onBackToSessions}) {
           )}
         </div>
       </div>
+
 
       <div className="game-controls">
         {viewMode === 'practice' ? (
@@ -775,5 +1002,6 @@ function GameAreaConnected({ session, onBackToSessions}) {
     </div>
   );
 }
+
 
 export default GameAreaConnected;
