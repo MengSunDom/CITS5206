@@ -21,13 +21,9 @@ def assert_result(desc, resp, expect_status, expect_keys=None):
         print('  Response:', data)
 
 def test_register_normal():
-    import time
-    ts = str(int(time.time()))
-    username = f'johndoe_{ts}'
-    email = f'john_{ts}@example.com'
     data = {
-        'username': username,
-        'email': email,
+        'username': 'johndoe',
+        'email': 'john@example.com',
         'password': 'SecurePass123!',
         'password2': 'SecurePass123!',
         'first_name': 'John',
@@ -35,10 +31,6 @@ def test_register_normal():
     }
     resp = requests.post(BASE_URL + 'register/', json=data)
     assert_result('Register-Normal', resp, 201, ['user', 'tokens'])
-    # 保存本次注册的用户名和邮箱，供后续用例使用
-    global TEST_USER_EMAIL, TEST_USER_USERNAME
-    TEST_USER_EMAIL = email
-    TEST_USER_USERNAME = username
 
 def test_register_duplicate():
     data = {
@@ -78,7 +70,7 @@ def test_register_weak_password():
 
 def test_login_normal():
     data = {
-        'email': TEST_USER_EMAIL,
+        'email': 'john@example.com',
         'password': 'SecurePass123!'
     }
     resp = requests.post(BASE_URL + 'login/', json=data)
@@ -194,30 +186,30 @@ def get_token(email, password):
         return None, None
 
 def get_auth_headers():
-    access, _ = get_token(TEST_USER_EMAIL, 'SecurePass123!')
+    access, _ = get_token('john@example.com', 'SecurePass123!')
     return {'Authorization': f'Bearer {access}'}
 
 def test_logout():
-    access, refresh = get_token(TEST_USER_EMAIL, 'SecurePass123!')
+    access, refresh = get_token('john@example.com', 'SecurePass123!')
     headers = {'Authorization': f'Bearer {access}'}
     resp = requests.post(BASE_URL + 'logout/', headers=headers, json={'refresh_token': refresh})
     assert_result('Logout', resp, 200)
 
 def test_profile():
-    access, _ = get_token(TEST_USER_EMAIL, 'SecurePass123!')
+    access, _ = get_token('john@example.com', 'SecurePass123!')
     headers = {'Authorization': f'Bearer {access}'}
     resp = requests.get(BASE_URL + 'profile/', headers=headers)
     assert_result('Profile-Get', resp, 200, ['user'])
 
 def test_profile_update():
-    access, _ = get_token(TEST_USER_EMAIL, 'SecurePass123!')
+    access, _ = get_token('john@example.com', 'SecurePass123!')
     headers = {'Authorization': f'Bearer {access}'}
     data = {'first_name': 'JohnUpdated', 'last_name': 'DoeUpdated'}
     resp = requests.put(BASE_URL + 'profile/update/', json=data, headers=headers)
     assert_result('Profile-Update', resp, 200)
 
 def test_password_reset():
-    data = {'email': TEST_USER_EMAIL}
+    data = {'email': 'john@example.com'}
     resp = requests.post(BASE_URL + 'password/reset/', json=data)
     assert_result('Password-Reset-Request', resp, 200)
 
@@ -228,7 +220,7 @@ def test_password_reset_confirm():
     assert_result('Password-Reset-Confirm-Invalid', resp, 400)
 
 def test_password_change():
-    access, _ = get_token(TEST_USER_EMAIL, 'SecurePass123!')
+    access, _ = get_token('john@example.com', 'SecurePass123!')
     headers = {'Authorization': f'Bearer {access}'}
     data = {'old_password': 'SecurePass123!', 'new_password': 'SecurePass456!', 'new_password2': 'SecurePass456!'}
     resp = requests.post(BASE_URL + 'password/change/', json=data, headers=headers)

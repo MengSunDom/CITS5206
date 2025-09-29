@@ -49,8 +49,9 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        print(f"[DEBUG][RegisterView] 注册新用户: id={user.id}, email={user.email}")
+        
         refresh = RefreshToken.for_user(user)
+        
         return Response({
             'user': UserSerializer(user).data,
             'tokens': {
@@ -81,9 +82,10 @@ class LoginView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
-        print(f"[DEBUG][LoginView] 登录用户: id={getattr(user, 'id', None)}, email={getattr(user, 'email', None)}")
+        
         login(request, user)
         refresh = RefreshToken.for_user(user)
+        
         return Response({
             'user': UserSerializer(user).data,
             'tokens': {
@@ -110,7 +112,6 @@ class LogoutView(APIView):
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
-            print(f"[DEBUG][LogoutView] 用户登出: id={getattr(request.user, 'id', None)}, email={getattr(request.user, 'email', None)}, refresh_token={refresh_token}")
         except Exception:
             pass
         
@@ -130,7 +131,6 @@ class UserProfileView(APIView):
         }
     )
     def get(self, request):
-        print(f"[DEBUG][UserProfileView][GET] request.user: id={getattr(request.user, 'id', None)}, email={getattr(request.user, 'email', None)}, is_authenticated={getattr(request.user, 'is_authenticated', None)}")
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
     
@@ -145,7 +145,6 @@ class UserProfileView(APIView):
         }
     )
     def put(self, request):
-        print(f"[DEBUG][UserProfileView][PUT] request.user: id={getattr(request.user, 'id', None)}, email={getattr(request.user, 'email', None)}, is_authenticated={getattr(request.user, 'is_authenticated', None)}")
         serializer = UserSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -165,7 +164,6 @@ class ProfileUpdateView(APIView):
         }
     )
     def get(self, request):
-        print(f"[DEBUG][ProfileUpdateView][GET] request.user: id={getattr(request.user, 'id', None)}, email={getattr(request.user, 'email', None)}, is_authenticated={getattr(request.user, 'is_authenticated', None)}")
         profile, created = Profile.objects.get_or_create(user=request.user)
         serializer = ProfileSerializer(profile)
         return Response(serializer.data)
@@ -181,7 +179,6 @@ class ProfileUpdateView(APIView):
         }
     )
     def put(self, request):
-        print(f"[DEBUG][ProfileUpdateView][PUT] request.user: id={getattr(request.user, 'id', None)}, email={getattr(request.user, 'email', None)}, is_authenticated={getattr(request.user, 'is_authenticated', None)}")
         profile, created = Profile.objects.get_or_create(user=request.user)
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
@@ -208,9 +205,10 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
+        
         email = serializer.validated_data['email']
         user = User.objects.get(email=email)
-        print(f"[DEBUG][PasswordResetRequestView] 请求重置: email={email}, user_id={user.id}")
+        
         reset_code = generate_reset_code()
         user.set_reset_code(reset_code)
         
@@ -252,9 +250,10 @@ class PasswordResetConfirmView(APIView):
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
+        
         user = serializer.validated_data['user']
         new_password = serializer.validated_data['new_password']
-        print(f"[DEBUG][PasswordResetConfirmView] 重置密码: user_id={user.id}, email={user.email}")
+        
         user.set_password(new_password)
         user.clear_reset_code()
         
@@ -281,8 +280,8 @@ class ChangePasswordView(APIView):
     def post(self, request):
         serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
+        
         user = request.user
-        print(f"[DEBUG][ChangePasswordView] 修改密码: user_id={getattr(user, 'id', None)}, email={getattr(user, 'email', None)}, is_authenticated={getattr(user, 'is_authenticated', None)}")
         user.set_password(serializer.validated_data['new_password'])
         user.save()
         
@@ -307,7 +306,6 @@ class ChangePasswordView(APIView):
 def refresh_token_view(request):
     try:
         refresh = RefreshToken(request.data.get('refresh'))
-        print(f"[DEBUG][refresh_token_view] 刷新token: refresh={request.data.get('refresh')}, user_id={getattr(request.user, 'id', None)}, email={getattr(request.user, 'email', None)}, is_authenticated={getattr(request.user, 'is_authenticated', None)}")
         return Response({
             'access': str(refresh.access_token),
         })
