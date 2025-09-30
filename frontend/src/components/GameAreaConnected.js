@@ -17,6 +17,44 @@ function GameAreaConnected({ session, onBackToSessions}) {
   const [viewMode, setViewMode] = useState('practice'); // 'practice' or 'history'
   const [dealHistory, setDealHistory] = useState([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
+  const handleUndoBid = async () => {
+    // Check if session exists
+    if (!session || !session.id) {
+      console.error("session is missing, cannot undo bid");
+      return;
+    }
+  
+    // Check if total deals is valid
+    if (!totalDeals || totalDeals < 1) {
+      console.error("totalDeals error");
+      return;
+    }
+    // Get previous deal number
+    const previousDealNumber = currentDealNumber > 1 ? currentDealNumber - 1 : totalDeals;
+  
+    try {
+      const response = await sessionService.undoPreviousBid(session.id, previousDealNumber);
+  
+      // Update
+      if (response.deal && response.deal.deal_number) {
+        setCurrentDealNumber(response.deal.deal_number);
+        const newDeal = await sessionService.getDeal(session.id, response.deal.deal_number);
+        setCurrentDeal(newDeal);
+      }
+  
+      if (response.user_sequence) {
+        setUserSequence(response.user_sequence);
+        
+      }
+  
+      if (response.position) {
+        setCurrentBiddingPosition(response.position);
+      }
+  
+    } catch (error) {
+      console.error("undo bid error:", error);
+    }
+  };
 
   // Load initial deal from backend when component mounts
   useEffect(() => {
@@ -708,6 +746,19 @@ function GameAreaConnected({ session, onBackToSessions}) {
                 Redouble (XX)
               </button>
             </div>
+          )}
+          {viewMode === 'practice' && (
+            <div className="special-calls">   
+              <button
+                className="special-call"
+                onClick={handleUndoBid}
+                disabled={isLoading || userSequence.length === 0 || getAuctionState().auctionEnded}
+                style={{ backgroundColor: '#ff9800' }}
+              >
+              Undo Last Bid
+              </button>
+    
+              </div>
           )}
 
           {viewMode === 'practice' && (

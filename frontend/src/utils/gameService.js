@@ -43,6 +43,22 @@ export const sessionService = {
     });
     return response.json();
   },
+  undoPreviousBid: async (sessionId, previousDealNumber) => {
+        // Log request details
+        console.log("Request URL:", `/game/sessions/${sessionId}/undo_previous_bid/?current_deal=${previousDealNumber}`);
+        console.log("UndoPreviousBid called with:", sessionId, previousDealNumber);
+        
+        // Send POST request to undo the last bid
+        const response = await apiCall(
+          `/game/sessions/${sessionId}/undo_previous_bid/?current_deal=${previousDealNumber}`, 
+          { method: "POST" }
+        );
+    
+        console.log("Raw undo response:", response);
+    
+        return response.json();
+    },
+  
 
   // Make a bid in a session
   makeBid: async (sessionId, bidAction) => {
