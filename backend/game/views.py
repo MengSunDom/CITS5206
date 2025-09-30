@@ -18,6 +18,7 @@ from .bridge_auction_validator import (
     update_auction_state,
     get_auction_state_from_history
 )
+from .services.auction_tree import build_auction_tree, record_user_response
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -484,6 +485,23 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         user_sequence.save()
 
+        # Record the response in the auction tree
+        # Build history string from sequence before this call
+        history_calls = []
+        for entry in current_sequence[:-1]:  # Exclude the call we just added
+            history_calls.append(entry['call'])
+        history_str = ' '.join(history_calls) if history_calls else ''
+
+        # Record the response
+        record_user_response(
+            session_id=session.id,
+            deal_index=deal.deal_number,
+            user_id=request.user.id,
+            history=history_str,
+            seat_to_act=position,
+            call=call
+        )
+
         return Response({
             'user_sequence': {
                 'sequence': user_sequence.sequence,
@@ -613,6 +631,41 @@ class SessionViewSet(viewsets.ModelViewSet):
             'history': history,
             'total_completed': len(history)
         })
+
+    @action(detail=True, methods=['get'])
+    def auction_tree(self, request, pk=None):
+        """Get the auction tree for a specific deal"""
+        session = self.get_object()
+        deal_index = request.query_params.get('deal_index')
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not deal_index:
+            return Response(
+                {'error': 'deal_index is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            deal_index = int(deal_index)
+        except ValueError:
+            return Response(
+                {'error': 'Invalid deal_index'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Build the tree
+        tree = build_auction_tree(session.id, deal_index)
+
+        if 'error' in tree:
+            return Response(tree, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(tree)
 
     @action(detail=True, methods=['get'])
     def get_next_practice(self, request, pk=None):

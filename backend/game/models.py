@@ -197,3 +197,88 @@ class ForkDeal(models.Model):
             hands=deal.hands,
             auction_history=deal.auction_history[:fork_index] + [new_bid],
         )
+
+
+class Node(models.Model):
+    """Represents a public state in the auction tree"""
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name='nodes'
+    )
+    deal = models.ForeignKey(
+        Deal,
+        on_delete=models.CASCADE,
+        related_name='nodes'
+    )
+    history = models.TextField(blank=True, help_text="Space-separated bidding history")
+    seat_to_act = models.CharField(max_length=1, choices=position_choice)
+    divergence = models.BooleanField(default=False, help_text="True if partners diverge at this node")
+    status = models.CharField(
+        max_length=10,
+        choices=[('open', 'Open'), ('closed', 'Closed')],
+        default='open'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('deal', 'history', 'seat_to_act')
+        indexes = [
+            models.Index(fields=['deal', 'history']),
+            models.Index(fields=['session', 'deal']),
+        ]
+
+    def __str__(self):
+        return f"Node: Deal {self.deal.deal_number} - History: {self.history or 'root'} - Seat: {self.seat_to_act}"
+
+    def get_state_key(self):
+        """Generate a unique key for this public state"""
+        return f"{self.session.id}_{self.deal.deal_number}_{self.seat_to_act}_{self.history}"
+
+    def is_auction_complete(self):
+        """Check if the auction is complete at this node"""
+        if not self.history:
+            return False
+
+        calls = self.history.strip().split()
+        if len(calls) >= 4:
+            # Check for four passes at the start
+            if calls[:4] == ['P', 'P', 'P', 'P']:
+                return True
+
+            # Check for three consecutive passes after a non-pass bid
+            if len(calls) >= 4:
+                last_three = calls[-3:]
+                if last_three == ['P', 'P', 'P']:
+                    # Find the last non-pass bid
+                    for call in reversed(calls[:-3]):
+                        if call != 'P':
+                            return True
+        return False
+
+
+class Response(models.Model):
+    """Tracks each partner's response at a node"""
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name='responses'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='auction_responses'
+    )
+    call = models.CharField(max_length=10, help_text="The call made (e.g., '1H', 'P', 'X')")
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('node', 'user')
+        indexes = [
+            models.Index(fields=['node', 'call']),
+            models.Index(fields=['user', 'node']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username}'s response at {self.node}: {self.call}"

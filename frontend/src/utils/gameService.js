@@ -43,6 +43,22 @@ export const sessionService = {
     });
     return response.json();
   },
+
+  // Get the auction tree for a specific deal
+  fetchAuctionTree: async (sessionId, dealIndex) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/auction_tree/?deal_index=${dealIndex}`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+
+  // Get all deals for a session
+  getAllDeals: async (sessionId) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/all_deals/`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
   undoPreviousBid: async (sessionId, previousDealNumber) => {
         // Log request details
         console.log("Request URL:", `/game/sessions/${sessionId}/undo_previous_bid/?current_deal=${previousDealNumber}`);

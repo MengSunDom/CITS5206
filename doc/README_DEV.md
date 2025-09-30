@@ -149,6 +149,63 @@ python manage.py migrate game zero
 python manage.py migrate
 ```
 
+## Auction Tree Visualization
+
+### Creating Mock Tree Data
+
+The application includes a management command to generate mock auction tree data for testing the visualization feature:
+
+#### Windows
+```batch
+# Run the batch file
+create_mock_tree.bat
+
+# Or manually
+cd backend
+venv\Scripts\activate
+python manage.py create_mock_tree_data
+```
+
+#### Linux/Mac
+```bash
+# Run the shell script
+./create_mock_tree.sh
+
+# Or manually
+cd backend
+source venv/bin/activate
+python manage.py create_mock_tree_data
+```
+
+This command creates:
+- Test users: `alice_test` and `bob_test` (password: `test123`)
+- A session named "Mock Tree Demo Session"
+- A complex auction tree with:
+  - Two main branches at South's first response (1H vs 1D)
+  - A sub-divergence in the 1D branch at North's rebid (1NT vs 2C)
+  - Multiple completed auctions showing different bidding paths
+
+### Viewing the Auction Tree
+
+1. Login with one of the test accounts (`alice_test` or `bob_test`)
+2. Navigate to the Sessions page
+3. Find "Mock Tree Demo Session"
+4. Click "View Auction Tree" button
+5. Use the deal selector dropdown to switch between deals
+
+### Tree Visualization Features
+
+- **Vertical Layout**: Main trunk flows vertically until divergence points
+- **Branching**: Shows where partners make different choices
+- **Edge Labels**: Display the call and who made it (e.g., "1♥ (alice_test,bob_test)")
+- **Node Colors**:
+  - Regular nodes: Dark gray circles
+  - Divergence nodes: Orange circles (where partners disagree)
+  - Closed auctions: Muted/grayed out branches
+- **Interactive**: Hover over nodes to see history, seat, and status
+- **Deal Selector**: Switch between different deals in the session
+- **Auto-refresh**: Click the refresh button to update the tree with new bids
+
 ## API Testing
 
 Use the built-in API documentation:
@@ -168,4 +225,22 @@ curl -X POST http://localhost:8000/api/game/sessions/ \
   -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"Test Session","partner_email":"bob@example.com"}'
+
+# Get auction tree for a deal
+curl -X GET http://localhost:8000/api/game/sessions/{session_id}/auction_tree/?deal_index=1 \
+  -H "Authorization: Bearer TOKEN"
 ```
+
+### New API Endpoints
+
+#### Get Auction Tree
+```
+GET /api/game/sessions/{session_id}/auction_tree/?deal_index={deal_index}
+```
+Returns the auction tree structure for a specific deal with nodes, edges, and metadata.
+
+#### Get All Deals
+```
+GET /api/game/sessions/{session_id}/all_deals/
+```
+Returns all deals for a session with their details.

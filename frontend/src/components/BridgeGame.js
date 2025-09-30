@@ -41,10 +41,10 @@ function BridgeGame({ currentUser, onLogout }) {
     setCurrentView('game');
   };
 
-  // Simple function to show comparison view
+  // Simple function to show comparison view (shows auction tree)
   const showComparisonView = (session) => {
     setCurrentSession(session);
-    setCurrentView('comparison');
+    setCurrentView('tree');
   };
 
   // Simple function to update session
@@ -93,7 +93,7 @@ function BridgeGame({ currentUser, onLogout }) {
       {currentView === 'tree' && currentSession && (
         <TreeView
           session={currentSession}
-          onBackToGame={hideTreeView}
+          onBackToGame={backToSessions}
         />
       )}
 

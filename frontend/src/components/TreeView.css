@@ -1,0 +1,231 @@
+/* TreeView.css - Styles for the Auction Tree visualization */
+
+.tree-view {
+  padding: 20px;
+  background: var(--color-background, #1f2121);
+  min-height: 100vh;
+  color: var(--color-text, #f5f5f5);
+  font-family: var(--font-family-base, 'Inter', sans-serif);
+}
+
+.tree-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.tree-header h2 {
+  color: var(--color-primary, #32b8c6);
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.tree-info {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  color: var(--color-text-secondary, rgba(167, 169, 169, 0.7));
+}
+
+.tree-info span {
+  padding: 4px 8px;
+  background: var(--color-surface, #262828);
+  border-radius: 4px;
+  border: 1px solid var(--color-border, rgba(119, 124, 124, 0.3));
+}
+
+.deal-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.deal-selector label {
+  color: var(--color-text, #f5f5f5);
+  font-weight: 500;
+}
+
+.deal-select {
+  background: var(--color-surface, #262828);
+  color: var(--color-text, #f5f5f5);
+  border: 1px solid var(--color-border, rgba(119, 124, 124, 0.3));
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.deal-select:hover {
+  border-color: var(--color-primary, #32b8c6);
+}
+
+.deal-select:focus {
+  outline: none;
+  border-color: var(--color-primary, #32b8c6);
+  box-shadow: 0 0 0 2px rgba(50, 184, 198, 0.2);
+}
+
+.back-btn, .refresh-btn {
+  background: var(--color-secondary, rgba(119, 124, 124, 0.15));
+  color: var(--color-text, #f5f5f5);
+  border: 1px solid var(--color-border, rgba(119, 124, 124, 0.3));
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover, .refresh-btn:hover {
+  background: var(--color-secondary-hover, rgba(119, 124, 124, 0.25));
+  border-color: var(--color-primary, #32b8c6);
+}
+
+.refresh-btn {
+  padding: 10px 15px;
+}
+
+.tree-container {
+  background: var(--color-surface, #262828);
+  border: 1px solid var(--color-card-border, rgba(119, 124, 124, 0.2));
+  border-radius: 12px;
+  padding: 20px;
+  overflow: auto;
+  min-height: 600px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.auction-tree-svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* SVG Styles */
+.edges {
+  stroke-width: 2;
+}
+
+.edge {
+  stroke: var(--color-primary, #32b8c6);
+  stroke-opacity: 0.6;
+  fill: none;
+}
+
+.edge.closed {
+  stroke: var(--color-text-secondary, rgba(167, 169, 169, 0.3));
+  stroke-dasharray: 5,5;
+}
+
+.nodes {
+  cursor: pointer;
+}
+
+.node {
+  fill: var(--color-surface, #262828);
+  stroke: var(--color-primary, #32b8c6);
+  stroke-width: 2;
+  transition: all 0.2s ease;
+}
+
+.node:hover {
+  fill: var(--color-secondary, rgba(119, 124, 124, 0.15));
+  stroke-width: 3;
+}
+
+.node.divergence {
+  fill: var(--color-warning, rgba(230, 129, 97, 0.2));
+  stroke: var(--color-warning, #e68161);
+  stroke-width: 3;
+}
+
+.node.closed {
+  fill: var(--color-secondary, rgba(119, 124, 124, 0.15));
+  stroke: var(--color-text-secondary, rgba(167, 169, 169, 0.3));
+  opacity: 0.6;
+}
+
+.node-label {
+  fill: var(--color-text, #f5f5f5);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.label-bg {
+  fill: var(--color-background, #1f2121);
+  stroke: var(--color-border, rgba(119, 124, 124, 0.3));
+  stroke-width: 1;
+}
+
+.edge-label {
+  fill: var(--color-text, #f5f5f5);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.edge-by {
+  fill: var(--color-text-secondary, rgba(167, 169, 169, 0.7));
+  font-size: 10px;
+}
+
+/* Suit colors in labels */
+.suit-h {
+  fill: var(--color-error, #ff5459);
+}
+
+.suit-d {
+  fill: var(--color-warning, #e68161);
+}
+
+.suit-c {
+  fill: var(--color-primary, #32b8c6);
+}
+
+.suit-s {
+  fill: var(--color-text, #f5f5f5);
+}
+
+/* Loading and error states */
+.tree-container p {
+  text-align: center;
+  color: var(--color-text-secondary, rgba(167, 169, 169, 0.7));
+}
+
+.tree-container .error {
+  color: var(--color-error, #ff5459);
+  margin-bottom: 20px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .tree-view {
+    padding: 10px;
+  }
+
+  .tree-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tree-header h2 {
+    font-size: 20px;
+  }
+
+  .tree-container {
+    padding: 10px;
+    overflow-x: auto;
+  }
+
+  .auction-tree-svg {
+    min-width: 600px;
+  }
+}
