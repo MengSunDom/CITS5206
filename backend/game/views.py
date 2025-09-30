@@ -263,6 +263,54 @@ class SessionViewSet(viewsets.ModelViewSet):
             'total': deals.count(),
             'latest_deal_number': deals.last().deal_number if deals.exists() else 0
         })
+    @action(detail=True, methods=['post'])
+    def undo_previous_bid(self, request, pk=None):
+        
+        session = self.get_object()
+
+        if request.user not in [session.creator, session.partner]:
+            return Response({'error': 'User not part of this session'}, status=403)
+
+        all_deals = list(session.deals.order_by('deal_number'))
+        if not all_deals:
+            return Response({'error': 'No deals in this session'}, status=400)
+        #Get the undo deal number from frontend
+        try:
+            current_deal_number = int(request.query_params.get('current_deal', all_deals[-1].deal_number))
+        except Exception:
+            current_deal_number = all_deals[-1].deal_number
+
+        current_index = next((i for i, d in enumerate(all_deals) if d.deal_number == current_deal_number), None)
+        if current_index is None:
+            return Response({'error': f'Deal {current_deal_number} not found'}, status=404)
+
+
+        deal = all_deals[current_index]
+
+        user_sequence = UserBiddingSequence.objects.filter(deal=deal, user=request.user).first()
+        #if not user_sequence or not user_sequence.sequence:
+        #    return Response({'error': "You can't do it now"}, status=400)
+        #remove last call
+        last_call = user_sequence.sequence.pop()
+        user_sequence.save()
+        #set next position as what we removed from the user sequence.
+        next_position = last_call['position']
+
+        return Response({
+            'button_deal_number': current_deal_number, 
+            'message': 'Last bid undone (previous deal)',
+            'undone_call': last_call,
+            'deal': {
+                'id': deal.id,
+                'deal_number': deal.deal_number,
+                'hands': deal.hands,
+                'dealer': deal.dealer,
+                'vulnerability': deal.vulnerability
+            },
+            'position': next_position,
+            'user_sequence': user_sequence.sequence,
+            'deal_number_after_undo': deal.deal_number
+        })
 
     @action(detail=False, methods=['post'])
     def make_call(self, request):
@@ -361,6 +409,7 @@ class SessionViewSet(viewsets.ModelViewSet):
             'deal': DealSerializer(deal).data,
             'auction_complete': deal.is_complete
         })
+    
 
     @action(detail=False, methods=['post'])
     def make_user_call(self, request):
