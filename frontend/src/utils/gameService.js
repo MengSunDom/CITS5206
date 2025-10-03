@@ -125,15 +125,6 @@ export const sessionService = {
     });
     return response.json();
   },
-
-  // Get all deals for a session
-  getAllDeals: async (sessionId) => {
-    const response = await apiCall(`/game/sessions/${sessionId}/all_deals/`, {
-      method: 'GET',
-    });
-    return response.json();
-  },
-
   // Make a call (bid/pass/double/redouble)
   makeCall: async (sessionId, dealId, call, alert = '') => {
     const response = await apiCall('/game/sessions/make_call/', {
