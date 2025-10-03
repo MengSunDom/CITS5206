@@ -562,10 +562,34 @@ select.form-control {
 }
 
 .game-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--space-20);
-  margin-bottom: var(--space-32);
+  margin-bottom: var(--space-16);
+}
+
+.game-header h2 {
+  color: var(--color-primary);
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-family-base);
+  justify-self: center;
+  text-align: center;
+}
+
+.sync-status {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.progress-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-20);
 }
 
 .back-btn {
@@ -591,12 +615,28 @@ select.form-control {
   box-shadow: var(--focus-ring);
 }
 
-.game-header h2 {
-  color: var(--color-primary);
-  margin: 0;
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-semibold);
+.progress-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: var(--space-10) var(--space-20);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  font-size: var(--font-size-base);
   font-family: var(--font-family-base);
+  font-weight: var(--font-weight-medium);
+  transition: all var(--duration-normal) var(--ease-standard);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.progress-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* Game Info Cards */
@@ -1160,12 +1200,13 @@ select.form-control {
 }
 
 .pass-btn {
-  background: var(--color-secondary);
-  border-color: var(--color-border);
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #10b981;
 }
 
 .pass-btn:hover {
-  background: var(--color-secondary-hover);
+  background: rgba(16, 185, 129, 0.25);
 }
 
 .double-btn {
@@ -1294,13 +1335,24 @@ select.form-control {
   }
   
   .game-header {
-    flex-direction: row;
-    gap: var(--space-8);
-    margin-bottom: var(--space-8);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-12);
+    margin-bottom: var(--space-16);
   }
 
   .game-header h2 {
     font-size: var(--font-size-lg);
+    order: -1;
+  }
+
+  .header-nav-buttons {
+    flex-wrap: wrap;
+  }
+
+  .sync-status {
+    width: 100%;
+    order: 1;
   }
   
   .game-info {

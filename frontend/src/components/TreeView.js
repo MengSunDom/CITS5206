@@ -5,12 +5,22 @@ import './TreeView.css';
 function TreeView({ session, onBackToGame }) {
   const [treeData, setTreeData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [selectedDealIndex, setSelectedDealIndex] = useState(1);
   const [availableDeals, setAvailableDeals] = useState([]);
+  const [comments, setComments] = useState({});
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [commentText, setCommentText] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
   const svgRef = useRef(null);
 
   useEffect(() => {
+    // Load current user from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setCurrentUser(user);
+
     // Load available deals for the session
     if (session && session.id) {
       loadAvailableDeals();
@@ -20,6 +30,7 @@ function TreeView({ session, onBackToGame }) {
   useEffect(() => {
     if (session && session.id && selectedDealIndex) {
       loadTreeData();
+      loadComments();
     }
   }, [session, selectedDealIndex]);
 
@@ -27,9 +38,11 @@ function TreeView({ session, onBackToGame }) {
     try {
       const response = await sessionService.getAllDeals(session.id);
       if (response && response.deals) {
-        setAvailableDeals(response.deals);
-        if (response.deals.length > 0 && !selectedDealIndex) {
-          setSelectedDealIndex(response.deals[0].deal_number);
+        // Filter deals that have tree data (has_tree_data flag from backend)
+        const availableDeals = response.deals.filter(deal => deal.has_tree_data);
+        setAvailableDeals(availableDeals);
+        if (availableDeals.length > 0 && !selectedDealIndex) {
+          setSelectedDealIndex(availableDeals[0].deal_number);
         }
       }
     } catch (err) {
@@ -37,9 +50,13 @@ function TreeView({ session, onBackToGame }) {
     }
   };
 
-  const loadTreeData = async () => {
+  const loadTreeData = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
       const data = await sessionService.fetchAuctionTree(session.id, selectedDealIndex);
       setTreeData(data);
@@ -48,7 +65,11 @@ function TreeView({ session, onBackToGame }) {
       console.error('Failed to load tree data:', err);
       setError('Failed to load auction tree');
     } finally {
-      setLoading(false);
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
@@ -189,6 +210,13 @@ function TreeView({ session, onBackToGame }) {
       circle.setAttribute('cy', pos.y);
       circle.setAttribute('r', nodeRadius);
       circle.setAttribute('class', `node ${node.divergence ? 'divergence' : ''} ${node.status}`);
+
+      // Make divergence nodes clickable
+      if (node.divergence) {
+        circle.style.cursor = 'pointer';
+        circle.addEventListener('click', () => handleNodeClick(nodeId, node));
+      }
+
       g.appendChild(circle);
 
       // Node label (seat to act)
@@ -201,15 +229,84 @@ function TreeView({ session, onBackToGame }) {
       text.textContent = node.seat;
       g.appendChild(text);
 
+      // Comment indicator for divergence nodes
+      if (node.divergence && node.db_id && comments[node.db_id] && comments[node.db_id].length > 0) {
+        const commentIcon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        commentIcon.setAttribute('x', pos.x + nodeRadius + 5);
+        commentIcon.setAttribute('y', pos.y - nodeRadius);
+        commentIcon.setAttribute('class', 'comment-indicator');
+        commentIcon.textContent = '💬';
+        commentIcon.style.fontSize = '14px';
+        g.appendChild(commentIcon);
+      }
+
       // Tooltip with history
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `History: ${node.history || 'Start'}\nSeat: ${node.seat}\nStatus: ${node.status}`;
+      const tooltipText = `History: ${node.history || 'Start'}\nSeat: ${node.seat}\nStatus: ${node.status}`;
+      title.textContent = node.divergence ? `${tooltipText}\n\nClick to add/view comments` : tooltipText;
       g.appendChild(title);
 
       nodeGroup.appendChild(g);
     });
 
     svg.appendChild(nodeGroup);
+  };
+
+  const loadComments = async () => {
+    try {
+      const response = await sessionService.fetchNodeComments(session.id, selectedDealIndex);
+      if (response.comments) {
+        // Index comments by node_id for quick lookup
+        const commentsMap = {};
+        response.comments.forEach(comment => {
+          if (!commentsMap[comment.node_id]) {
+            commentsMap[comment.node_id] = [];
+          }
+          commentsMap[comment.node_id].push(comment);
+        });
+        setComments(commentsMap);
+      }
+    } catch (err) {
+      console.error('Failed to load comments:', err);
+    }
+  };
+
+  const handleNodeClick = (nodeId, nodeData) => {
+    // Only allow comments on divergence nodes
+    if (!nodeData.divergence) return;
+
+    // Use db_id from nodeData for backend operations
+    setSelectedNode({ id: nodeId, db_id: nodeData.db_id, data: nodeData });
+
+    // Find existing comment for current user using db_id
+    const nodeComments = comments[nodeData.db_id] || [];
+    const userComment = nodeComments.find(c => c.user.id === currentUser.id);
+    setCommentText(userComment ? userComment.comment_text : '');
+    setShowCommentModal(true);
+  };
+
+  const handleSaveComment = async () => {
+    if (!selectedNode) return;
+
+    try {
+      const response = await sessionService.saveNodeComment(
+        session.id,
+        selectedDealIndex,
+        selectedNode.db_id,  // Use database ID instead of string ID
+        commentText
+      );
+
+      if (response.ok) {
+        // Reload comments
+        await loadComments();
+        setShowCommentModal(false);
+        setSelectedNode(null);
+        setCommentText('');
+      }
+    } catch (err) {
+      console.error('Failed to save comment:', err);
+      alert('Failed to save comment. Please try again.');
+    }
   };
 
   const formatCall = (call) => {
@@ -241,7 +338,7 @@ function TreeView({ session, onBackToGame }) {
   };
 
   const handleRefresh = () => {
-    loadTreeData();
+    loadTreeData(true); // Pass true to indicate this is a refresh
   };
 
   if (loading) {
@@ -279,6 +376,22 @@ function TreeView({ session, onBackToGame }) {
     );
   }
 
+  if (availableDeals.length === 0) {
+    return (
+      <div className="tree-view">
+        <div className="tree-header">
+          <button className="back-btn" onClick={onBackToGame}>
+            ← Back to Sessions
+          </button>
+          <h2>Auction Tree - {session?.name}</h2>
+        </div>
+        <div className="tree-container">
+          <p className="info-message">No deals with auction data yet. Make some bids to generate the auction tree.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="tree-view">
       <div className="tree-header">
@@ -306,8 +419,8 @@ function TreeView({ session, onBackToGame }) {
           <span>Dealer: {treeData?.dealer}</span>
           <span>Vulnerability: {treeData?.vul}</span>
         </div>
-        <button onClick={handleRefresh} className="refresh-btn">
-          Refresh
+        <button onClick={handleRefresh} className="refresh-btn" disabled={refreshing}>
+          {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
@@ -322,6 +435,68 @@ function TreeView({ session, onBackToGame }) {
           {/* Tree will be rendered here */}
         </svg>
       </div>
+
+      {/* Comment Modal */}
+      {showCommentModal && (
+        <div className="modal-overlay" onClick={() => setShowCommentModal(false)}>
+          <div className="modal-content comment-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Divergence Node Comment</h2>
+            <p className="modal-hint">
+              If your partner chose this call, what would you do? Discuss your strategy here.
+            </p>
+
+            <div className="comments-section">
+              <div className="your-comment">
+                <h3>Your Comment:</h3>
+                <textarea
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="Enter your strategy or thoughts about this divergence..."
+                  rows="5"
+                  className="comment-textarea"
+                />
+              </div>
+
+              {selectedNode && comments[selectedNode.db_id] && comments[selectedNode.db_id].length > 0 && (
+                <div className="existing-comments">
+                  <h3>All Comments:</h3>
+                  {comments[selectedNode.db_id]
+                    .map(comment => (
+                      <div key={comment.id} className="comment-item">
+                        <div className="comment-header">
+                          <strong>
+                            {comment.user.username}
+                            {comment.user.id === currentUser?.id && ' (You)'}
+                          </strong>
+                          <span className="comment-time">
+                            {new Date(comment.updated_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="comment-text">{comment.comment_text}</div>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions">
+              <button
+                onClick={() => setShowCommentModal(false)}
+                className="modal-btn cancel-btn"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveComment}
+                className="modal-btn confirm-btn"
+              >
+                Save Comment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

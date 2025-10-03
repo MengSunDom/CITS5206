@@ -3,7 +3,7 @@ import { sessionService } from '../utils/gameService';
 import './GameArea.css';
 
 
-function GameAreaConnected({ session, onBackToSessions}) {
+function GameAreaConnected({ session, onBackToSessions, onShowProgressView, reloadTimestamp, onReloadComplete, initialDealNumber, onDealChange }) {
   const [currentDeal, setCurrentDeal] = useState(null);
   const [currentDealNumber, setCurrentDealNumber] = useState(null);
   const [currentBiddingPosition, setCurrentBiddingPosition] = useState(''); // Position currently bidding
@@ -60,7 +60,6 @@ function GameAreaConnected({ session, onBackToSessions}) {
 
   // Load initial deal from backend when component mounts
   useEffect(() => {
-    loadNextPractice();
     // Get user's actual position from session
     if (session.player_games) {
       const currentUserGame = session.player_games.find(pg =>
@@ -71,7 +70,23 @@ function GameAreaConnected({ session, onBackToSessions}) {
         setUserPosition(currentUserGame.position);
       }
     }
+
+    // If we have an initialDealNumber (coming back from progress view), load that specific deal
+    if (initialDealNumber) {
+      loadSpecificDeal(initialDealNumber);
+    } else {
+      loadNextPractice();
+    }
   }, [session.id]);
+
+  // Reload when reloadTimestamp is set (e.g., after rewind)
+  useEffect(() => {
+    if (reloadTimestamp && onReloadComplete) {
+      reloadCurrentDeal().then(() => {
+        onReloadComplete(); // Clear the timestamp after reload
+      });
+    }
+  }, [reloadTimestamp]);
 
 
   const loadDealHistory = async () => {
@@ -149,8 +164,8 @@ function GameAreaConnected({ session, onBackToSessions}) {
       const response = await sessionService.getNextPractice(session.id, currentDealNumber || 0);
 
 
-      if (response.completed) {
-        // Set special completion message
+      if (response.completed && !response.deal) {
+        // No deals at all in session
         setError('COMPLETION:All deals completed! Great job!');
         return;
       }
@@ -165,13 +180,125 @@ function GameAreaConnected({ session, onBackToSessions}) {
       // Set the deal and position from backend
       setCurrentDeal(response.deal);
       setCurrentDealNumber(response.deal.deal_number);
+      if (onDealChange) onDealChange(response.deal.deal_number);
       setCurrentBiddingPosition(response.position);
       setUserSequence(response.user_sequence || []);
       setTotalDeals(response.total_deals);
       setAlertText('');
+
+      // Show info message if all deals are completed
+      if (response.all_completed) {
+        setError('INFO:All deals in this session are completed. Showing completed deal for review.');
+      }
     } catch (err) {
       setError('Failed to load next practice. Please try again.');
       console.error('Practice loading error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadSpecificDeal = async (dealNumber) => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Get the specific deal from backend
+      const dealResponse = await sessionService.getDeal(session.id, dealNumber);
+
+      if (dealResponse.error) {
+        setError(dealResponse.error);
+        return;
+      }
+
+      // Get user sequences for this deal
+      const seqResponse = await sessionService.getUserSequences(session.id, dealNumber);
+
+      if (seqResponse.error) {
+        setError(seqResponse.error);
+        return;
+      }
+
+      // Find current user's sequence
+      const currentUserSequence = seqResponse.user_sequences?.find(
+        seq => seq.user_id === JSON.parse(localStorage.getItem('user') || '{}').id
+      );
+
+      // Set the deal and user sequence
+      setCurrentDeal(dealResponse);
+      setCurrentDealNumber(dealNumber);
+      if (onDealChange) onDealChange(dealNumber);
+      setUserSequence(currentUserSequence?.sequence || []);
+
+      // Determine next position to act
+      if (currentUserSequence?.sequence && currentUserSequence.sequence.length > 0) {
+        const lastCall = currentUserSequence.sequence[currentUserSequence.sequence.length - 1];
+        const positions = ['N', 'E', 'S', 'W'];
+        const lastPosIdx = positions.indexOf(lastCall.position);
+        const nextPosIdx = (lastPosIdx + 1) % 4;
+        setCurrentBiddingPosition(positions[nextPosIdx]);
+      } else {
+        setCurrentBiddingPosition(dealResponse.dealer);
+      }
+
+      setAlertText('');
+    } catch (err) {
+      setError('Failed to load deal. Please try again.');
+      console.error('Deal loading error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const reloadCurrentDeal = async () => {
+    if (!currentDealNumber) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Get the specific deal from backend
+      const dealResponse = await sessionService.getDeal(session.id, currentDealNumber);
+
+      if (dealResponse.error) {
+        setError(dealResponse.error);
+        return;
+      }
+
+      // Get user sequences for this deal
+      const seqResponse = await sessionService.getUserSequences(session.id, currentDealNumber);
+
+      if (seqResponse.error) {
+        setError(seqResponse.error);
+        return;
+      }
+
+      // Find current user's sequence
+      const currentUserSequence = seqResponse.user_sequences?.find(
+        seq => seq.user_id === JSON.parse(localStorage.getItem('user') || '{}').id
+      );
+
+      // Set the deal and user sequence
+      setCurrentDeal(dealResponse);
+      setUserSequence(currentUserSequence?.sequence || []);
+
+      // Determine next position to act
+      if (currentUserSequence?.sequence && currentUserSequence.sequence.length > 0) {
+        const lastCall = currentUserSequence.sequence[currentUserSequence.sequence.length - 1];
+        const positions = ['N', 'E', 'S', 'W'];
+        const lastPosIdx = positions.indexOf(lastCall.position);
+        const nextPosIdx = (lastPosIdx + 1) % 4;
+        setCurrentBiddingPosition(positions[nextPosIdx]);
+      } else {
+        setCurrentBiddingPosition(dealResponse.dealer);
+      }
+
+      setAlertText('');
+    } catch (err) {
+      setError('Failed to reload deal. Please try again.');
+      console.error('Deal reload error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -863,25 +990,26 @@ function GameAreaConnected({ session, onBackToSessions}) {
 
   return (
     <div className="game-area">
-      <div className="game-header" style={{ position: 'relative' }}>
+      <div className="game-header">
         <button className="back-btn" onClick={onBackToSessions}>
           ← Back to Sessions
         </button>
         <h2>{session.name} {viewMode === 'history' ? '- History Review' : ''}</h2>
-        <div style={{
-          position: 'absolute',
-          right: '20px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          fontSize: '12px',
-          color: '#666'
-        }}>
+        <div className="sync-status">
           {isSyncing && <span>🔄 Syncing...</span>}
           {!isSyncing && lastSyncTime && (
             <span>✓ Synced {Math.floor((new Date() - lastSyncTime) / 1000)}s ago</span>
           )}
         </div>
       </div>
+
+      {currentDealNumber && onShowProgressView && (
+        <div className="progress-section">
+          <button className="progress-btn" onClick={() => onShowProgressView(currentDealNumber)}>
+            My Progress
+          </button>
+        </div>
+      )}
 
 
       {error && (

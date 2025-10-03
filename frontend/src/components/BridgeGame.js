@@ -3,12 +3,15 @@ import SessionManagerConnected from './SessionManagerConnected';
 import GameAreaConnected from './GameAreaConnected';
 import TreeView from './TreeView';
 import ComparisonView from './ComparisonView';
+import MyProgressView from './MyProgressView';
 import './BridgeGame.css';
 
 function BridgeGame({ currentUser, onLogout }) {
   const [currentView, setCurrentView] = useState('sessions');
   const [currentSession, setCurrentSession] = useState(null);
+  const [currentDealIndex, setCurrentDealIndex] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [reloadTimestamp, setReloadTimestamp] = useState(null); // Timestamp to trigger one-time reload
 
   // Load sessions when component first loads
   React.useEffect(() => {
@@ -45,6 +48,25 @@ function BridgeGame({ currentUser, onLogout }) {
   const showComparisonView = (session) => {
     setCurrentSession(session);
     setCurrentView('tree');
+  };
+
+  // Simple function to show progress view
+  const showProgressView = (dealIndex) => {
+    setCurrentDealIndex(dealIndex);
+    setCurrentView('progress');
+  };
+
+  // Simple function to hide progress view
+  const hideProgressView = (shouldReload = false) => {
+    // Handle case where shouldReload might be an event object
+    const needsReload = shouldReload === true;
+
+    if (needsReload) {
+      setReloadTimestamp(Date.now()); // Set timestamp to trigger reload
+    } else {
+      setReloadTimestamp(null); // Clear timestamp - no reload needed
+    }
+    setCurrentView('game');
   };
 
   // Simple function to update session
@@ -86,7 +108,12 @@ function BridgeGame({ currentUser, onLogout }) {
           session={currentSession}
           onBackToSessions={backToSessions}
           onShowTreeView={showTreeView}
+          onShowProgressView={showProgressView}
           onUpdateSession={updateSession}
+          reloadTimestamp={reloadTimestamp}
+          onReloadComplete={() => setReloadTimestamp(null)}
+          initialDealNumber={currentDealIndex}
+          onDealChange={(dealNumber) => setCurrentDealIndex(dealNumber)}
         />
       )}
 
@@ -101,6 +128,14 @@ function BridgeGame({ currentUser, onLogout }) {
         <ComparisonView
           session={currentSession}
           onBackToSessions={backToSessions}
+        />
+      )}
+
+      {currentView === 'progress' && currentSession && currentDealIndex && (
+        <MyProgressView
+          session={currentSession}
+          dealIndex={currentDealIndex}
+          onBackToGame={hideProgressView}
         />
       )}
 

@@ -117,6 +117,7 @@ def build_auction_tree(session_id: int, deal_index: int) -> dict:
 
         # Add node to tree
         tree['nodes'][current_id] = {
+            'db_id': current_node.id,  # Add database ID for backend operations
             'history': current_node.history,
             'seat': current_node.seat_to_act,
             'divergence': False,  # Will be set based on responses
@@ -177,6 +178,7 @@ def build_auction_tree(session_id: int, deal_index: int) -> dict:
         node_id = get_node_id(node)
         if node_id not in tree['nodes']:
             tree['nodes'][node_id] = {
+                'db_id': node.id,  # Add database ID for backend operations
                 'history': node.history,
                 'seat': node.seat_to_act,
                 'divergence': node.divergence,

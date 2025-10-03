@@ -9,7 +9,8 @@ from django.conf import settings
 import random
 import hashlib
 import time
-from .models import Session, PlayerGame, Deal, UserBiddingSequence
+from .models import Session, PlayerGame, Deal, UserBiddingSequence, Node, ResponseAudit, NodeComment
+from .models import Response as ResponseModel
 from .serializers import SessionSerializer, PlayerGameSerializer, DealSerializer
 from .utils import shuffle_and_deal, get_next_position, is_auction_complete, calculate_bid_value
 from .bridge_auction_validator import (
@@ -56,8 +57,22 @@ class SessionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get max deals based on environment
-        max_deals = settings.MAX_DEALS_PER_SESSION
+        # Get max deals from request or use default
+        max_deals = request.data.get('max_deals', settings.MAX_DEALS_PER_SESSION)
+
+        # Validate max_deals
+        try:
+            max_deals = int(max_deals)
+            if max_deals < 1 or max_deals > 100:
+                return Response(
+                    {'error': 'Number of deals must be between 1 and 100'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Invalid number of deals'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Generate a seed for reproducible deal generation
         seed_string = f"{request.user.id}_{partner.id}_{time.time()}"
@@ -259,14 +274,25 @@ class SessionViewSet(viewsets.ModelViewSet):
         session = self.get_object()
         deals = session.deals.order_by('deal_number')
         serializer = DealSerializer(deals, many=True)
+
+        # Add has_tree_data flag for each deal
+        deals_data = serializer.data
+        for deal_data in deals_data:
+            # Check if this deal has any nodes (which means it has auction tree data)
+            has_nodes = Node.objects.filter(deal_id=deal_data['id']).exists()
+            deal_data['has_tree_data'] = has_nodes
+
         return Response({
-            'deals': serializer.data,
+            'deals': deals_data,
             'total': deals.count(),
             'latest_deal_number': deals.last().deal_number if deals.exists() else 0
         })
     @action(detail=True, methods=['post'])
     def undo_previous_bid(self, request, pk=None):
-        
+        """
+        Undo last bid - separate from My Progress rewind functionality.
+        This only modifies UserBiddingSequence and does not touch Response.is_active.
+        """
         session = self.get_object()
 
         if request.user not in [session.creator, session.partner]:
@@ -275,7 +301,8 @@ class SessionViewSet(viewsets.ModelViewSet):
         all_deals = list(session.deals.order_by('deal_number'))
         if not all_deals:
             return Response({'error': 'No deals in this session'}, status=400)
-        #Get the undo deal number from frontend
+
+        # Get the undo deal number from frontend
         try:
             current_deal_number = int(request.query_params.get('current_deal', all_deals[-1].deal_number))
         except Exception:
@@ -285,21 +312,22 @@ class SessionViewSet(viewsets.ModelViewSet):
         if current_index is None:
             return Response({'error': f'Deal {current_deal_number} not found'}, status=404)
 
-
         deal = all_deals[current_index]
 
         user_sequence = UserBiddingSequence.objects.filter(deal=deal, user=request.user).first()
-        #if not user_sequence or not user_sequence.sequence:
-        #    return Response({'error': "You can't do it now"}, status=400)
-        #remove last call
+        if not user_sequence or not user_sequence.sequence:
+            return Response({'error': "No calls to undo"}, status=400)
+
+        # Remove last call from sequence (does NOT touch Response model)
         last_call = user_sequence.sequence.pop()
         user_sequence.save()
-        #set next position as what we removed from the user sequence.
+
+        # Set next position as what we removed from the user sequence
         next_position = last_call['position']
 
         return Response({
-            'button_deal_number': current_deal_number, 
-            'message': 'Last bid undone (previous deal)',
+            'button_deal_number': current_deal_number,
+            'message': 'Last bid undone',
             'undone_call': last_call,
             'deal': {
                 'id': deal.id,
@@ -668,6 +696,231 @@ class SessionViewSet(viewsets.ModelViewSet):
         return Response(tree)
 
     @action(detail=True, methods=['get'])
+    def my_progress(self, request, pk=None):
+        """Get user's bidding progress for a specific deal"""
+        session = self.get_object()
+        deal_index = request.query_params.get('deal_index')
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not deal_index:
+            return Response(
+                {'error': 'deal_index is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            deal_index = int(deal_index)
+            deal = session.deals.get(deal_number=deal_index)
+        except (ValueError, Deal.DoesNotExist):
+            return Response(
+                {'error': 'Invalid deal_index or deal not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get all nodes for this deal where user has active responses
+        user_responses = ResponseModel.objects.filter(
+            node__deal=deal,
+            user=request.user,
+            is_active=True
+        ).select_related('node').order_by('node__history')
+
+        # Build the progress timeline
+        nodes = []
+        current_node_id = None
+
+        # Add root node
+        root_node = {
+            'node_id': f'n_0',
+            'seat': deal.dealer,
+            'history': '',
+            'your_call': None,
+            'created_at': None,
+            'is_terminal': False
+        }
+        nodes.append(root_node)
+
+        # Build nodes from responses
+        for idx, response in enumerate(user_responses):
+            node = response.node
+            node_data = {
+                'node_id': f'n_{idx + 1}',
+                'seat': node.seat_to_act,
+                'history': node.history,
+                'your_call': response.call,
+                'created_at': response.timestamp.isoformat(),
+                'is_terminal': node.is_auction_complete()
+            }
+            nodes.append(node_data)
+            current_node_id = f'n_{idx + 1}'
+
+        # Default theme colors
+        theme = {
+            'primary': '#2D3A8C',
+            'muted': '#6B7280',
+            'bg': '#0B1023'
+        }
+
+        return Response({
+            'session_id': session.id,
+            'deal_index': deal_index,
+            'dealer': deal.dealer,
+            'vul': deal.vulnerability,
+            'theme': theme,
+            'nodes': nodes,
+            'current_node_id': current_node_id or 'n_0'
+        })
+
+    @action(detail=True, methods=['post'])
+    def rewind(self, request, pk=None):
+        """Rewind user's progress to a specific node"""
+        session = self.get_object()
+        deal_index = request.data.get('deal_index')
+        node_id = request.data.get('node_id')
+        confirm = request.data.get('confirm', False)
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not all([deal_index, node_id]):
+            return Response(
+                {'error': 'deal_index and node_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not confirm:
+            return Response(
+                {'error': 'confirm must be true to perform rewind'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            deal_index = int(deal_index)
+            deal = session.deals.get(deal_number=deal_index)
+        except (ValueError, Deal.DoesNotExist):
+            return Response(
+                {'error': 'Invalid deal_index or deal not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Use atomic transaction for rewind
+        with transaction.atomic():
+            # Get all user's active responses for this deal
+            user_responses = list(ResponseModel.objects.filter(
+                node__deal=deal,
+                user=request.user,
+                is_active=True
+            ).select_related('node').order_by('node__history'))
+
+            # Parse node_id to get the target index
+            try:
+                target_idx = int(node_id.split('_')[1])
+            except (ValueError, IndexError):
+                return Response(
+                    {'error': 'Invalid node_id format'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Find responses to rewind (those after target_idx)
+            responses_to_rewind = user_responses[target_idx:] if target_idx < len(user_responses) else []
+
+            deleted_response_ids = []
+            current_node_id = None
+
+            # Mark responses as inactive and create audit entries
+            for response in responses_to_rewind:
+                # Create audit entry
+                ResponseAudit.objects.create(
+                    response=response,
+                    user=request.user,
+                    node=response.node,
+                    session=session,
+                    deal=deal,
+                    old_call=response.call,
+                    action='REWIND',
+                    metadata={
+                        'rewind_to_node': node_id,
+                        'node_history': response.node.history
+                    }
+                )
+
+                # Mark as inactive
+                response.is_active = False
+                response.superseded_at = timezone.now()
+                response.superseded_by_action = 'REWIND'
+                response.save()
+
+                deleted_response_ids.append(response.id)
+
+            # Update UserBiddingSequence to remove calls after the rewind point
+            user_sequence = UserBiddingSequence.objects.filter(
+                deal=deal,
+                user=request.user
+            ).first()
+
+            if user_sequence and user_sequence.sequence:
+                # Truncate sequence to only include calls up to target_idx
+                if target_idx < len(user_sequence.sequence):
+                    user_sequence.sequence = user_sequence.sequence[:target_idx]
+                    user_sequence.save()
+
+            # Get updated sequence after truncation
+            updated_sequence = user_sequence.sequence if user_sequence else []
+
+            # Determine the next action
+            if target_idx > 0 and target_idx <= len(user_responses):
+                target_response = user_responses[target_idx - 1]
+                target_node = target_response.node
+                current_node_id = f'n_{target_idx}'
+
+                # The next node to act on is derived from the history
+                history_calls = target_node.history.strip().split() if target_node.history.strip() else []
+                history_calls.append(target_response.call)
+                next_history = ' '.join(history_calls)
+
+                # Calculate next seat
+                positions = ['N', 'E', 'S', 'W']
+                dealer_idx = positions.index(deal.dealer)
+                next_seat_idx = (dealer_idx + len(history_calls)) % 4
+                next_seat = positions[next_seat_idx]
+
+                next_action = {
+                    'node_id': current_node_id,
+                    'seat': next_seat,
+                    'history': next_history,
+                    'message': 'You are back at this node. Choose your call to continue.'
+                }
+            else:
+                # Rewinding to root
+                current_node_id = 'n_0'
+                next_action = {
+                    'node_id': 'n_0',
+                    'seat': deal.dealer,
+                    'history': '',
+                    'message': 'You are back at the start. Choose your call to continue.'
+                }
+
+        return Response({
+            'ok': True,
+            'rewound_from': f'n_{len(user_responses)}' if user_responses else 'n_0',
+            'to_node_id': node_id,
+            'deleted_response_ids': deleted_response_ids,
+            'next_action': next_action,
+            'updated_sequence': updated_sequence,
+            'deal_id': deal.id,
+            'deal_number': deal.deal_number
+        })
+
+    @action(detail=True, methods=['get'])
     def get_next_practice(self, request, pk=None):
         """Get next deal and position for practice following sequence-first navigation"""
         from django.db import transaction
@@ -728,11 +981,36 @@ class SessionViewSet(viewsets.ModelViewSet):
             break
 
         if not selected_deal:
-            # All deals complete
-            return Response({
-                'message': 'All deals completed! Great job!',
-                'completed': True
-            })
+            # All deals complete - show the first deal for review
+            if all_deals:
+                selected_deal = all_deals[0]
+                user_sequence = UserBiddingSequence.objects.filter(
+                    deal=selected_deal,
+                    user=request.user
+                ).first()
+
+                # Determine position (use dealer since auction is complete)
+                selected_position = selected_deal.dealer
+
+                return Response({
+                    'deal': {
+                        'id': selected_deal.id,
+                        'deal_number': selected_deal.deal_number,
+                        'hands': selected_deal.hands,
+                        'dealer': selected_deal.dealer,
+                        'vulnerability': selected_deal.vulnerability
+                    },
+                    'position': selected_position,
+                    'user_sequence': user_sequence.sequence if user_sequence else [],
+                    'total_deals': len(all_deals),
+                    'max_deals': session.max_deals,
+                    'all_completed': True
+                })
+            else:
+                return Response({
+                    'message': 'No deals in this session',
+                    'completed': True
+                })
 
         # Get user's existing sequence for this deal (if any)
         user_sequence = UserBiddingSequence.objects.filter(
@@ -752,6 +1030,114 @@ class SessionViewSet(viewsets.ModelViewSet):
             'user_sequence': user_sequence.sequence if user_sequence else [],
             'total_deals': len(all_deals),
             'max_deals': session.max_deals
+        })
+
+    @action(detail=True, methods=['get'])
+    def node_comments(self, request, pk=None):
+        """Get all comments for a specific deal's nodes"""
+        session = self.get_object()
+        deal_index = request.query_params.get('deal_index')
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not deal_index:
+            return Response(
+                {'error': 'deal_index is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            deal_index = int(deal_index)
+            deal = session.deals.get(deal_number=deal_index)
+        except (ValueError, Deal.DoesNotExist):
+            return Response(
+                {'error': 'Invalid deal_index or deal not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get all comments for this deal
+        comments = NodeComment.objects.filter(
+            deal=deal,
+            session=session
+        ).select_related('user', 'node')
+
+        # Format comments by node
+        comments_data = []
+        for comment in comments:
+            comments_data.append({
+                'id': comment.id,
+                'node_id': comment.node.id,
+                'node_history': comment.node.history,
+                'user': {
+                    'id': comment.user.id,
+                    'username': comment.user.username,
+                    'email': comment.user.email
+                },
+                'comment_text': comment.comment_text,
+                'created_at': comment.created_at.isoformat(),
+                'updated_at': comment.updated_at.isoformat()
+            })
+
+        return Response({
+            'comments': comments_data,
+            'deal_index': deal_index
+        })
+
+    @action(detail=True, methods=['post'])
+    def save_node_comment(self, request, pk=None):
+        """Save or update a comment on a node"""
+        session = self.get_object()
+        deal_index = request.data.get('deal_index')
+        node_id = request.data.get('node_id')
+        comment_text = request.data.get('comment_text', '').strip()
+
+        # Check if user is part of this session
+        if request.user not in [session.creator, session.partner]:
+            return Response(
+                {'error': 'You are not part of this session'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not all([deal_index, node_id]):
+            return Response(
+                {'error': 'deal_index and node_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            deal_index = int(deal_index)
+            deal = session.deals.get(deal_number=deal_index)
+            node = Node.objects.get(id=node_id, deal=deal)
+        except (ValueError, Deal.DoesNotExist, Node.DoesNotExist):
+            return Response(
+                {'error': 'Invalid deal_index or node_id'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Create or update comment
+        comment, created = NodeComment.objects.update_or_create(
+            node=node,
+            user=request.user,
+            session=session,
+            deal=deal,
+            defaults={'comment_text': comment_text}
+        )
+
+        return Response({
+            'ok': True,
+            'created': created,
+            'comment': {
+                'id': comment.id,
+                'node_id': comment.node.id,
+                'comment_text': comment.comment_text,
+                'created_at': comment.created_at.isoformat(),
+                'updated_at': comment.updated_at.isoformat()
+            }
         })
 
 

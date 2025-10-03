@@ -198,6 +198,48 @@ export const sessionService = {
     });
     return response.json();
   },
+
+  // Get user's progress for a specific deal
+  fetchMyProgress: async (sessionId, dealIndex) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/my_progress/?deal_index=${dealIndex}`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+
+  // Rewind to a specific node
+  rewindToNode: async (sessionId, dealIndex, nodeId) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/rewind/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        deal_index: dealIndex,
+        node_id: nodeId,
+        confirm: true
+      }),
+    });
+    return response.json();
+  },
+
+  // Get all comments for a deal's nodes
+  fetchNodeComments: async (sessionId, dealIndex) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/node_comments/?deal_index=${dealIndex}`, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+
+  // Save or update a comment on a node
+  saveNodeComment: async (sessionId, dealIndex, nodeId, commentText) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/save_node_comment/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        deal_index: dealIndex,
+        node_id: nodeId,
+        comment_text: commentText
+      }),
+    });
+    return response.json();
+  },
 };
 
 // PlayerGame API calls

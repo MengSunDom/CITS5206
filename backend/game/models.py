@@ -273,12 +273,118 @@ class Response(models.Model):
     call = models.CharField(max_length=10, help_text="The call made (e.g., '1H', 'P', 'X')")
     timestamp = models.DateTimeField(auto_now_add=True)
 
+    # Soft-versioning fields for rewind functionality
+    is_active = models.BooleanField(default=True, help_text="False when rewound past this response")
+    superseded_at = models.DateTimeField(null=True, blank=True, help_text="When this response was superseded")
+    superseded_by_action = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[
+            ('REWIND', 'Rewind'),
+            ('ADMIN', 'Admin Action'),
+            ('MERGE', 'Merge'),
+        ],
+        help_text="Why this response was superseded"
+    )
+
     class Meta:
-        unique_together = ('node', 'user')
         indexes = [
             models.Index(fields=['node', 'call']),
             models.Index(fields=['user', 'node']),
+            models.Index(fields=['is_active']),
         ]
 
     def __str__(self):
         return f"{self.user.username}'s response at {self.node}: {self.call}"
+
+
+class ResponseAudit(models.Model):
+    """Audit trail for response changes (rewinds, etc.)"""
+    response = models.ForeignKey(
+        Response,
+        on_delete=models.CASCADE,
+        related_name='audit_entries',
+        null=True,
+        blank=True
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='response_audits'
+    )
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name='audit_entries',
+        null=True,
+        blank=True
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name='response_audits'
+    )
+    deal = models.ForeignKey(
+        Deal,
+        on_delete=models.CASCADE,
+        related_name='response_audits'
+    )
+    old_call = models.CharField(max_length=10, help_text="The call that was superseded")
+    action = models.CharField(
+        max_length=20,
+        choices=[
+            ('REWIND', 'Rewind'),
+            ('ADMIN', 'Admin Action'),
+            ('MERGE', 'Merge'),
+        ],
+        help_text="Type of action performed"
+    )
+    action_timestamp = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(default=dict, blank=True, help_text="Additional context about the action")
+
+    class Meta:
+        ordering = ['-action_timestamp']
+        indexes = [
+            models.Index(fields=['user', 'session', 'deal']),
+            models.Index(fields=['action_timestamp']),
+        ]
+
+
+class NodeComment(models.Model):
+    """Comments on divergence nodes for partner discussion"""
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name='comments'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='node_comments'
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name='node_comments'
+    )
+    deal = models.ForeignKey(
+        Deal,
+        on_delete=models.CASCADE,
+        related_name='node_comments'
+    )
+    comment_text = models.TextField(help_text="User's comment on this divergence node")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['node', 'user']),
+            models.Index(fields=['session', 'deal']),
+        ]
+        # Each user can only have one comment per node
+        unique_together = ['node', 'user']
+
+    def __str__(self):
+        return f"{self.user.username}'s comment on node {self.node.id}"

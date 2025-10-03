@@ -193,15 +193,9 @@ class Command(BaseCommand):
         alice_sequence.save()
         bob_sequence.save()
 
-        # Create additional deals for more practice
-        for deal_num in range(2, 5):  # Create deals 2-4
-            Deal.objects.create(
-                session=session,
-                deal_number=deal_num,
-                dealer=['E', 'S', 'W'][deal_num - 2],  # Rotate dealer
-                vulnerability=['NS', 'EW', 'Both'][deal_num - 2],  # Rotate vulnerability
-                hands=hands  # Use same hands for simplicity
-            )
+        # Mark deal as complete
+        deal.is_complete = True
+        deal.save()
 
         self.stdout.write(self.style.SUCCESS(f'Successfully created mock session: {session.name}'))
         self.stdout.write(self.style.SUCCESS(f'Session ID: {session.id}'))
@@ -216,6 +210,5 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('  - Complete auction histories for both players'))
         self.stdout.write(self.style.SUCCESS('  - Both auctions properly terminated with three passes'))
         self.stdout.write(self.style.SUCCESS('Session features:'))
-        self.stdout.write(self.style.SUCCESS('  - Deal 1: Complete with bidding history (viewable and can undo)'))
-        self.stdout.write(self.style.SUCCESS('  - Deals 2-4: Fresh deals ready for practice'))
+        self.stdout.write(self.style.SUCCESS('  - Deal 1: Complete with bidding history and tree data'))
         self.stdout.write(self.style.SUCCESS('  - Tree visualization shows divergence points'))
