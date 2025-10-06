@@ -12,6 +12,7 @@ function BridgeGame({ currentUser, onLogout }) {
   const [currentDealIndex, setCurrentDealIndex] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [reloadTimestamp, setReloadTimestamp] = useState(null); // Timestamp to trigger one-time reload
+  const [enterSessionTimestamp, setEnterSessionTimestamp] = useState(Date.now()); // Timestamp when entering session
 
   // Load sessions when component first loads
   React.useEffect(() => {
@@ -26,12 +27,14 @@ function BridgeGame({ currentUser, onLogout }) {
   const enterSession = (session) => {
     setCurrentSession(session);
     setCurrentView('game');
+    setEnterSessionTimestamp(Date.now()); // Update timestamp to trigger reload even for same session
   };
 
   // Simple function to go back to sessions
   const backToSessions = () => {
     setCurrentView('sessions');
     setCurrentSession(null);
+    setCurrentDealIndex(null); // Clear deal index to ensure fresh load on re-entry
   };
 
   // Simple function to show tree view
@@ -63,6 +66,7 @@ function BridgeGame({ currentUser, onLogout }) {
 
     if (needsReload) {
       setReloadTimestamp(Date.now()); // Set timestamp to trigger reload
+      setCurrentDealIndex(null); // Clear deal index to get fresh task from scheduler after rewind
     } else {
       setReloadTimestamp(null); // Clear timestamp - no reload needed
     }
@@ -105,6 +109,7 @@ function BridgeGame({ currentUser, onLogout }) {
 
       {currentView === 'game' && currentSession && (
         <GameAreaConnected
+          key={enterSessionTimestamp} // Force remount on every enter to check for new tasks
           session={currentSession}
           onBackToSessions={backToSessions}
           onShowTreeView={showTreeView}

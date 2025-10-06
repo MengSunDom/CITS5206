@@ -43,6 +43,11 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
     }
   };
 
+  const handleEnterSession = (session) => {
+    // Enter session - GameAreaConnected will use getNextTask to find next available node
+    onEnterSession(session);
+  };
+
   const countCompletedBids = (session) => {
     if (!session.player_games) return 0;
 
@@ -70,13 +75,21 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
       );
     }
 
+    // Get current user info
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+
     return sessions.map(session => {
       const completedBids = countCompletedBids(session);
+
+      // Determine who is the partner for current user
+      const isCreator = currentUser.id === session.creator?.id;
+      const partnerUser = isCreator ? session.partner : session.creator;
+      const partnerDisplay = partnerUser?.username || partnerUser?.email || 'Unknown';
 
       return (
         <div key={session.id} className="session-item">
           <h3>{session.name}</h3>
-          <p><strong>Partner:</strong> {session.partner?.email || session.partner?.username}</p>
+          <p><strong>Partner:</strong> {partnerDisplay}</p>
           <p><strong>Created:</strong> {new Date(session.create_at).toLocaleDateString()}</p>
           <p><strong>Dealer:</strong> {session.dealer}</p>
           <p><strong>Vulnerability:</strong> {session.vulnerability}</p>
@@ -85,7 +98,7 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
           <div className="session-actions">
             <button
               className="create-session"
-              onClick={() => onEnterSession(session)}
+              onClick={() => handleEnterSession(session)}
             >
               Enter Session
             </button>

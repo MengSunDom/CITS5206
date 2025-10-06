@@ -97,16 +97,19 @@
   border: 1px solid var(--color-card-border, rgba(119, 124, 124, 0.2));
   border-radius: 12px;
   padding: 20px;
-  overflow: auto;
-  min-height: 600px;
+  width: 100%;
+  height: calc(100vh - 180px);
   display: flex;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
 }
 
 .auction-tree-svg {
-  display: block;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 /* SVG Styles */
@@ -123,6 +126,22 @@
 .edge.closed {
   stroke: var(--color-text-secondary, rgba(167, 169, 169, 0.3));
   stroke-dasharray: 5,5;
+}
+
+/* Edge colors based on by_set */
+.edge.by-creator {
+  stroke: #ff4444; /* red for creator */
+  stroke-opacity: 0.8;
+}
+
+.edge.by-partner {
+  stroke: #4444ff; /* blue for partner */
+  stroke-opacity: 0.8;
+}
+
+.edge.by-both {
+  stroke: #000000; /* black for both */
+  stroke-opacity: 0.8;
 }
 
 .nodes {
@@ -153,6 +172,27 @@
   opacity: 0.6;
 }
 
+/* Node colors based on who_needs (from current user perspective) */
+.node.who-needs-both {
+  fill: rgba(255, 255, 0, 0.3); /* yellow - both need to answer */
+  stroke: #ffcc00;
+}
+
+.node.who-needs-me {
+  fill: rgba(255, 182, 193, 0.3); /* pink - I (current user) need to answer */
+  stroke: #ff69b4;
+}
+
+.node.who-needs-partner-user {
+  fill: rgba(173, 216, 230, 0.3); /* light-blue - partner needs to answer */
+  stroke: #87ceeb;
+}
+
+.node.who-needs-none {
+  fill: rgba(128, 128, 128, 0.3); /* grey - complete, no one needs to answer */
+  stroke: #888888;
+}
+
 .node-label {
   fill: var(--color-text, #f5f5f5);
   font-size: 14px;
@@ -162,19 +202,23 @@
 
 .label-bg {
   fill: var(--color-background, #1f2121);
-  stroke: var(--color-border, rgba(119, 124, 124, 0.3));
-  stroke-width: 1;
+  fill-opacity: 0.95;
+  stroke: var(--color-border, rgba(119, 124, 124, 0.5));
+  stroke-width: 1.5;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .edge-label {
   fill: var(--color-text, #f5f5f5);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .edge-by {
-  fill: var(--color-text-secondary, rgba(167, 169, 169, 0.7));
-  font-size: 10px;
+  fill: var(--color-text-secondary, rgba(167, 169, 169, 0.8));
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* Suit colors in labels */
@@ -222,11 +266,13 @@
 
   .tree-container {
     padding: 10px;
-    overflow-x: auto;
+    height: calc(100vh - 220px);
   }
+}
 
-  .auction-tree-svg {
-    min-width: 600px;
+@media (max-width: 1024px) {
+  .tree-container {
+    height: calc(100vh - 200px);
   }
 }
 

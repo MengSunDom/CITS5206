@@ -117,6 +117,27 @@
   border-color: var(--color-ok);
 }
 
+/* Timeline node colors based on who_needs (from current user perspective) */
+.timeline-node.who-needs-both {
+  border-left-color: #ffcc00; /* yellow - both need to answer */
+  background: rgba(255, 255, 0, 0.05);
+}
+
+.timeline-node.who-needs-me {
+  border-left-color: #ff69b4; /* pink - I (current user) need to answer */
+  background: rgba(255, 182, 193, 0.05);
+}
+
+.timeline-node.who-needs-partner-user {
+  border-left-color: #87ceeb; /* light-blue - partner needs to answer */
+  background: rgba(173, 216, 230, 0.05);
+}
+
+.timeline-node.who-needs-none {
+  border-left-color: #888888; /* grey - complete, no one needs to answer */
+  background: rgba(128, 128, 128, 0.05);
+}
+
 .timeline-node-marker {
   min-width: 40px;
   height: 40px;

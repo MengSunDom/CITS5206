@@ -18,42 +18,59 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
   const [viewMode, setViewMode] = useState('practice'); // 'practice' or 'history'
   const [dealHistory, setDealHistory] = useState([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
+  const [taskReason, setTaskReason] = useState(''); // Scheduler reason: PLUS4, RANDOM_DEAL_SMALLEST_DEPTH, etc
+  const [isAllCompleted, setIsAllCompleted] = useState(false); // Track if user has completed all tasks
+  const [currentHistory, setCurrentHistory] = useState(''); // Current branch history for validation
   const handleUndoBid = async () => {
     // Check if session exists
     if (!session || !session.id) {
       console.error("session is missing, cannot undo bid");
+      setError("Session not found");
       return;
     }
-  
-    // Check if total deals is valid
-    if (!totalDeals || totalDeals < 1) {
-      console.error("totalDeals error");
-      return;
-    }
-    // Get previous deal number
-    const previousDealNumber = currentDealNumber > 1 ? currentDealNumber - 1 : totalDeals;
-  
+
     try {
-      const response = await sessionService.undoPreviousBid(session.id, previousDealNumber);
-  
-      // Update
-      if (response.deal && response.deal.deal_number) {
-        setCurrentDealNumber(response.deal.deal_number);
-        const newDeal = await sessionService.getDeal(session.id, response.deal.deal_number);
-        setCurrentDeal(newDeal);
+      setIsLoading(true);
+      setError('');
+
+      // Call global undo endpoint (removes most recent response across all deals)
+      const response = await sessionService.globalUndo(session.id);
+
+      if (response.error) {
+        setError(response.error);
+        return;
       }
-  
-      if (response.user_sequence) {
-        setUserSequence(response.user_sequence);
-        
+
+      if (response.ok) {
+        // Show success message with details
+        const undoneCall = response.undone_response.call;
+        const dealNumber = response.affected_deal;
+        const deletedCount = response.deleted_response_count;
+
+        const message = `Undid ${deletedCount} response(s) in Deal ${dealNumber}`;
+        console.log(message);
+
+        // Use scheduler to get next task (response includes next_action)
+        if (response.next_action) {
+          if (response.next_action.node_id) {
+            // Load the deal for next task
+            loadNextPractice(); // This will call scheduler and load appropriate task
+          } else {
+            // All caught up
+            setIsAllCompleted(true);
+            setError('INFO:All deals in this session are completed.');
+            loadNextPractice(); // Load review mode
+          }
+        } else {
+          // Fallback: just reload next practice
+          loadNextPractice();
+        }
       }
-  
-      if (response.position) {
-        setCurrentBiddingPosition(response.position);
-      }
-  
     } catch (error) {
       console.error("undo bid error:", error);
+      setError("Failed to undo bid: " + error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -88,10 +105,10 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
     }
   }, [reloadTimestamp]);
 
-
   const loadDealHistory = async () => {
     setIsLoading(true);
     setError('');
+    setTaskReason(''); // Clear task reason when viewing history
 
 
     try {
@@ -159,37 +176,72 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
     setIsLoading(true);
     setError('');
 
-
     try {
-      const response = await sessionService.getNextPractice(session.id, currentDealNumber || 0);
+      // Use new scheduler
+      const taskResponse = await sessionService.getNextTask(session.id);
 
+      // If no task found (all caught up)
+      if (!taskResponse.node_id) {
+        setIsAllCompleted(true);
+        setError('INFO:All deals in this session are completed. Showing completed deal for review.');
 
-      if (response.completed && !response.deal) {
-        // No deals at all in session
-        setError('COMPLETION:All deals completed! Great job!');
+        // Load last deal for review with user's sequence
+        const deals = await sessionService.getAllDeals(session.id);
+        if (deals && deals.length > 0) {
+          const lastDeal = deals[deals.length - 1];
+
+          // Get user sequences for the last deal
+          const seqResponse = await sessionService.getUserSequences(session.id, lastDeal.deal_number);
+
+          // Find current user's sequence
+          const currentUserSequence = seqResponse.user_sequences?.find(
+            seq => seq.user_id === JSON.parse(localStorage.getItem('user') || '{}').id
+          );
+
+          setCurrentDeal(lastDeal);
+          setCurrentDealNumber(lastDeal.deal_number);
+          if (onDealChange) onDealChange(lastDeal.deal_number);
+          setTotalDeals(deals.length);
+          setUserSequence(currentUserSequence?.sequence || []);
+
+          // Set bidding position to last position in sequence (for display purposes)
+          if (currentUserSequence?.sequence && currentUserSequence.sequence.length > 0) {
+            const lastCall = currentUserSequence.sequence[currentUserSequence.sequence.length - 1];
+            const positions = ['N', 'E', 'S', 'W'];
+            const lastPosIdx = positions.indexOf(lastCall.position);
+            const nextPosIdx = (lastPosIdx + 1) % 4;
+            setCurrentBiddingPosition(positions[nextPosIdx]);
+          } else {
+            setCurrentBiddingPosition(lastDeal.dealer);
+          }
+
+          setTaskReason('ALL_CAUGHT_UP');
+        }
         return;
       }
 
+      // Task found - use deal from task response
+      setCurrentDeal(taskResponse.deal);
+      setCurrentDealNumber(taskResponse.deal_index);
+      if (onDealChange) onDealChange(taskResponse.deal_index);
 
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
+      // Use the seat calculated by scheduler (next position in user's sequence)
+      // This supports both fixed-seat and all-seat bidding modes
+      setCurrentBiddingPosition(taskResponse.seat);
 
+      // Get user's sequence from task response
+      setUserSequence(taskResponse.user_sequence || []);
 
-      // Set the deal and position from backend
-      setCurrentDeal(response.deal);
-      setCurrentDealNumber(response.deal.deal_number);
-      if (onDealChange) onDealChange(response.deal.deal_number);
-      setCurrentBiddingPosition(response.position);
-      setUserSequence(response.user_sequence || []);
-      setTotalDeals(response.total_deals);
+      // Store current history for validation
+      setCurrentHistory(taskResponse.history || '');
+
+      const allDeals = await sessionService.getAllDeals(session.id);
+      setTotalDeals(allDeals.length);
       setAlertText('');
 
-      // Show info message if all deals are completed
-      if (response.all_completed) {
-        setError('INFO:All deals in this session are completed. Showing completed deal for review.');
-      }
+      // Set task reason
+      setTaskReason(taskResponse.reason || '');
+      setIsAllCompleted(false);
     } catch (err) {
       setError('Failed to load next practice. Please try again.');
       console.error('Practice loading error:', err);
@@ -201,6 +253,7 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
   const loadSpecificDeal = async (dealNumber) => {
     setIsLoading(true);
     setError('');
+    setTaskReason(''); // Clear task reason when loading specific deal
 
     try {
       // Get the specific deal from backend
@@ -359,7 +412,8 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
         currentDeal.id,
         currentBiddingPosition,
         call,
-        alertText
+        alertText,
+        currentHistory  // Pass current branch history
       );
 
 
@@ -369,17 +423,17 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
         setUserSequence(response.user_sequence.sequence);
         setAlertText('');
 
-
-        // Check if this deal's auction is complete
+        // If this branch's auction is complete, immediately load next task
+        // Don't delay or show alert - user might have more tasks on other branches
         if (response.auction_complete) {
-          alert(`Deal #${currentDealNumber} has been completed!`);
-        }
-
-
-        // Automatically get next deal/position from backend after each call
-        setTimeout(() => {
+          // Immediately load next practice without delay
           loadNextPractice();
-        }, 1000); // 1 second delay before auto-transition
+        } else {
+          // Normal case - delay before auto-transition
+          setTimeout(() => {
+            loadNextPractice();
+          }, 1000); // 1 second delay before auto-transition
+        }
       }
     } catch (err) {
       setError('Failed to make call. Please try again.');
@@ -967,7 +1021,7 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
                   key={bid}
                   className={`bid-button suit-${suit === 'NT' ? 'nt' : suit.toLowerCase()} ${isLegal ? 'legal' : 'illegal'}`}
                   onClick={() => makeCall(bid)}
-                  disabled={!isLegal || isLoading || getAuctionState().auctionEnded}
+                  disabled={!isLegal || isLoading || getAuctionState().auctionEnded || isAllCompleted}
                 >
                   <div className="bid-content">
                     <span className="bid-level">{level}</span>
@@ -998,16 +1052,37 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
         
         <h2>{session.name} {viewMode === 'history' ? '- History Review' : ''}</h2>
         <div className="sync-status">
-          {isSyncing && <span>🔄 Syncing...</span>}
+          {isSyncing && <span>Syncing...</span>}
           {!isSyncing && lastSyncTime && (
             <span>✓ Synced {Math.floor((new Date() - lastSyncTime) / 1000)}s ago</span>
           )}
         </div>
       </div>
 
+      {taskReason && taskReason !== '' && (
+        <div style={{
+          padding: '8px 16px',
+          backgroundColor: '#611abdff',
+          border: '1px solid #b3d9e8',
+          borderRadius: '4px',
+          margin: '0 20px 10px 20px',
+          fontSize: '14px',
+          color: '#ffffffff'
+        }}>
+          {taskReason === 'PLUS4' && 'Jumped 4 calls ahead to match table rotation'}
+          {taskReason === 'RANDOM_DEAL_SMALLEST_DEPTH' && 'Selected random deal, starting from smallest depth'}
+          {taskReason === 'ALL_CAUGHT_UP' && 'All tasks completed!'}
+        </div>
+      )}
+
       {currentDealNumber && onShowProgressView && (
         <div className="progress-section">
-          <button className="progress-btn" onClick={() => onShowProgressView(currentDealNumber)}>
+          <button
+            className="progress-btn"
+            onClick={() => onShowProgressView(currentDealNumber)}
+            disabled={isAllCompleted}
+            style={{ opacity: isAllCompleted ? 0.5 : 1, cursor: isAllCompleted ? 'not-allowed' : 'pointer' }}
+          >
             My Progress
           </button>
         </div>
@@ -1082,37 +1157,38 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
               <button
                 className="special-call pass-btn"
                 onClick={() => makeCall('Pass')}
-                disabled={isLoading || getAuctionState().auctionEnded}
+                disabled={isLoading || getAuctionState().auctionEnded || isAllCompleted}
               >
                 Pass
               </button>
               <button
                 className="special-call double-btn"
                 onClick={() => makeCall('X')}
-                disabled={isLoading || !isLegalBid('X')}
+                disabled={isLoading || !isLegalBid('X') || isAllCompleted}
               >
                 Double (X)
               </button>
               <button
                 className="special-call redouble-btn"
                 onClick={() => makeCall('XX')}
-                disabled={isLoading || !isLegalBid('XX')}
+                disabled={isLoading || !isLegalBid('XX') || isAllCompleted}
               >
                 Redouble (XX)
               </button>
             </div>
           )}
           {viewMode === 'practice' && (
-            <div className="special-calls">   
+            <div className="special-calls">
               <button
                 className="special-call"
                 onClick={handleUndoBid}
-                disabled={isLoading || userSequence.length === 0 || getAuctionState().auctionEnded}
+                disabled={isLoading || isAllCompleted}
                 style={{ backgroundColor: '#ff9800' }}
+                title="Undo your most recent response (any deal)"
               >
               Undo Last Bid
               </button>
-    
+
               </div>
           )}
 
@@ -1127,7 +1203,7 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
                 placeholder="Explain your call..."
                 value={alertText}
                 onChange={(e) => setAlertText(e.target.value)}
-                disabled={isLoading}
+                disabled={isLoading || isAllCompleted}
               />
             </div>
           )}
