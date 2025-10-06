@@ -42,11 +42,6 @@ function BridgeGame({ currentUser, onLogout }) {
     setCurrentView('tree');
   };
 
-  // Simple function to hide tree view
-  const hideTreeView = () => {
-    setCurrentView('game');
-  };
-
   // Simple function to show comparison view (shows auction tree)
   const showComparisonView = (session) => {
     setCurrentSession(session);

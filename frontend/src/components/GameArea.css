@@ -144,17 +144,18 @@ a:hover {
 .progress-section {
   display: flex;
   justify-content: center;
-  margin-bottom: var(--space-20);
+  margin-bottom: var(--space-12);
+  padding: 0 var(--space-20);
 }
 
 .progress-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: var(--space-10) var(--space-20);
+  padding: var(--space-8) var(--space-16);
   border-radius: var(--radius-base);
   cursor: pointer;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-family: var(--font-family-base);
   font-weight: var(--font-weight-medium);
   transition: all var(--duration-normal) var(--ease-standard);
@@ -171,19 +172,69 @@ a:hover {
   box-shadow: var(--focus-ring);
 }
 
+/* Game Area Container - Optimized for single viewport */
+.game-area {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+/* Game Header - Compact layout */
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-12) var(--space-20);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.game-header h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.sync-status {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.back-btn {
+  background: var(--color-secondary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  padding: var(--space-6) var(--space-12);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family-base);
+  transition: all var(--duration-normal) var(--ease-standard);
+}
+
+.back-btn:hover {
+  background: var(--color-secondary-hover);
+  border-color: var(--color-primary);
+}
+
 /* Game Info Cards */
 .game-info {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-20);
-  margin-bottom: var(--space-32);
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-12);
+  margin-bottom: var(--space-16);
+  padding: 0 var(--space-20);
 }
 
 .info-card {
   background: var(--color-surface);
   border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-20);
+  border-radius: var(--radius-base);
+  padding: var(--space-12);
   text-align: center;
   transition: all var(--duration-normal) var(--ease-standard);
   box-shadow: var(--shadow-sm);
@@ -197,29 +248,25 @@ a:hover {
 
 .info-card h3 {
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-10);
-  font-size: var(--font-size-base);
+  margin: 0 0 var(--space-6) 0;
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   font-family: var(--font-family-base);
 }
 
 .info-card .value {
   color: var(--color-primary);
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
   font-family: var(--font-family-base);
 }
 
-/* Bridge Table */
+/* Bridge Table - Optimized for single position display */
 .bridge-table {
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  grid-template-rows: 1fr 2fr 1fr;
-  gap: var(--space-20);
-  margin-bottom: var(--space-32);
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-16);
+  padding: 0 var(--space-20);
 }
 
 .position {
@@ -229,11 +276,13 @@ a:hover {
   justify-content: center;
   background: var(--color-surface);
   border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-20);
+  border-radius: var(--radius-md);
+  padding: var(--space-16);
   transition: all var(--duration-normal) var(--ease-standard);
-  min-height: 200px;
+  min-height: 120px;
   box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 600px;
 }
 
 .position.current-bidder {
@@ -266,23 +315,24 @@ a:hover {
 .position-label {
   color: var(--color-primary);
   font-weight: var(--font-weight-bold);
-  margin-bottom: var(--space-16);
-  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-12);
+  font-size: var(--font-size-base);
   font-family: var(--font-family-base);
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-6);
 }
 
 .bidding-indicator {
   animation: pulse 1.5s infinite;
   filter: drop-shadow(0 0 5px rgba(var(--color-primary-rgb), 0.8));
+  font-size: var(--font-size-base);
 }
 
 .cards {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-6);
   align-items: center;
   width: 100%;
 }
@@ -290,30 +340,30 @@ a:hover {
 .suit-row {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   width: 100%;
 }
 
 .suit-symbol {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
   font-family: var(--font-family-base);
-  min-width: 25px;
+  min-width: 20px;
   text-align: center;
 }
 
 .cards-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-2);
   justify-content: flex-start;
   flex: 1;
 }
 
-/* Realistic Playing Cards */
+/* Realistic Playing Cards - Compact size */
 .card {
-  width: 32px;
-  height: 44px;
+  width: 28px;
+  height: 38px;
   background: var(--color-surface);
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-sm);
@@ -321,7 +371,7 @@ a:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   font-weight: var(--font-weight-semibold);
   font-family: var(--font-family-base);
   color: var(--color-text);
@@ -367,13 +417,13 @@ a:hover {
 }
 
 .card-value {
-  font-size: var(--font-size-xs);
+  font-size: 9px;
   font-weight: var(--font-weight-bold);
   line-height: 1;
 }
 
 .card-suit {
-  font-size: var(--font-size-sm);
+  font-size: 11px;
   line-height: 1;
 }
 
@@ -413,26 +463,31 @@ a:hover {
   max-width: 200px;
 }
 
-/* Bidding Area */
+/* Bidding Area - Optimized for single viewport */
 .bidding-area {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-32);
-  margin-bottom: var(--space-32);
+  grid-template-columns: 350px 1fr;
+  gap: var(--space-16);
+  margin-bottom: var(--space-12);
+  padding: 0 var(--space-20);
+  flex: 1;
+  overflow: hidden;
 }
 
 .auction-history,
 .bid-controls {
   background: var(--color-surface);
   border-radius: var(--radius-md);
-  padding: var(--space-16);
+  padding: var(--space-12);
+  overflow-y: auto;
+  max-height: 100%;
 }
 
 .auction-history h3,
 .bid-controls h3 {
   color: var(--color-primary);
-  margin-bottom: var(--space-20);
-  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-12);
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   font-family: var(--font-family-base);
 }
@@ -440,34 +495,34 @@ a:hover {
 /* Enhanced Bridge Auction Table */
 .auction-container {
   background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: var(--space-20);
-  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-base);
+  padding: var(--space-12);
+  box-shadow: var(--shadow-sm);
   border: 1px solid var(--color-card-border);
 }
 
 .auction-table {
   display: grid;
-  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
   gap: 0;
   background: var(--color-background);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  box-shadow: var(--shadow-inset-sm), var(--shadow-lg);
+  box-shadow: var(--shadow-inset-sm), var(--shadow-sm);
   margin: 0 auto;
-  max-width: 400px;
+  max-width: 320px;
 }
 
 .auction-header {
   background: var(--color-primary);
   color: var(--color-btn-primary-text);
-  padding: var(--space-16) var(--space-8);
+  padding: var(--space-8) var(--space-4);
   text-align: center;
   font-weight: var(--font-weight-bold);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-family: var(--font-family-base);
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
   border-right: 1px solid rgba(255, 255, 255, 0.2);
   border-bottom: 1px solid var(--color-primary-active);
@@ -480,9 +535,9 @@ a:hover {
 
 .auction-cell {
   background: var(--color-surface);
-  padding: var(--space-12) var(--space-8);
+  padding: var(--space-8) var(--space-4);
   text-align: center;
-  min-height: 50px;
+  min-height: 36px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -559,15 +614,15 @@ a:hover {
   opacity: 0.3;
 }
 
-/* Enhanced Bid Buttons */
+/* Enhanced Bid Buttons - Compact layout */
 .bid-buttons {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: var(--space-8);
-  margin-bottom: var(--space-20);
-  padding: var(--space-16);
+  gap: var(--space-4);
+  margin-bottom: var(--space-12);
+  padding: var(--space-8);
   background: var(--color-surface);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-base);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--color-card-border);
 }
@@ -575,8 +630,8 @@ a:hover {
 .bid-button {
   background: var(--color-secondary);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-12) var(--space-8);
+  border-radius: var(--radius-sm);
+  padding: var(--space-8) var(--space-4);
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-standard);
   color: var(--color-text);
@@ -584,7 +639,7 @@ a:hover {
   font-family: var(--font-family-base);
   position: relative;
   overflow: hidden;
-  min-height: 55px;
+  min-height: 45px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -677,22 +732,23 @@ a:hover {
                0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* Enhanced Special Calls */
+/* Enhanced Special Calls - Compact layout */
 .special-calls {
   display: flex;
-  gap: var(--space-12);
-  margin-bottom: var(--space-20);
+  gap: var(--space-8);
+  margin-bottom: var(--space-12);
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .special-call {
   background: var(--color-secondary);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  padding: var(--space-16) var(--space-24);
-  border-radius: var(--radius-md);
+  padding: var(--space-10) var(--space-16);
+  border-radius: var(--radius-base);
   cursor: pointer;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   font-family: var(--font-family-base);
   transition: all var(--duration-normal) var(--ease-standard);
@@ -758,25 +814,26 @@ a:hover {
 }
 
 .alert-section {
-  margin-top: var(--space-20);
+  margin-top: var(--space-12);
 }
 
 .alert-section label {
   display: block;
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-6);
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-medium);
   font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
 }
 
 .alert-input {
   width: 100%;
-  padding: var(--space-12);
+  padding: var(--space-8);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-base);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-family: var(--font-family-base);
   transition: all var(--duration-normal) var(--ease-standard);
 }
@@ -787,12 +844,13 @@ a:hover {
   box-shadow: var(--focus-ring);
 }
 
-/* Game Controls */
+/* Game Controls - Compact layout */
 .game-controls {
   display: flex;
   justify-content: center;
-  gap: var(--space-20);
+  gap: var(--space-12);
   flex-wrap: wrap;
+  padding: var(--space-12) var(--space-20);
 }
 
 .tree-btn:hover {
@@ -802,4 +860,48 @@ a:hover {
 .tree-btn:focus-visible {
   outline: none !important;
   box-shadow: var(--focus-ring) !important;
+}
+
+/* Error message - Compact layout */
+.error-message {
+  margin: var(--space-8) var(--space-20);
+  padding: var(--space-10);
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-sm);
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-height: 900px) {
+  .info-card {
+    padding: var(--space-8);
+  }
+
+  .info-card h3 {
+    font-size: 11px;
+  }
+
+  .info-card .value {
+    font-size: var(--font-size-lg);
+  }
+
+  .position {
+    min-height: 100px;
+    padding: var(--space-12);
+  }
+
+  .bid-button {
+    min-height: 40px;
+    padding: var(--space-6) var(--space-4);
+  }
+}
+
+/* Ensure content fits in viewport */
+@media (max-width: 1400px) {
+  .bidding-area {
+    grid-template-columns: 300px 1fr;
+  }
+
+  .auction-table {
+    max-width: 280px;
+  }
 }

@@ -14,6 +14,10 @@ function TreeView({ session, onBackToGame }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
+  const [devMode, setDevMode] = useState(() => {
+    // Check localStorage for dev mode flag
+    return localStorage.getItem('treeDevMode') === 'true';
+  });
   const svgRef = useRef(null);
 
   useEffect(() => {
@@ -40,6 +44,57 @@ function TreeView({ session, onBackToGame }) {
       }
     } catch (err) {
       console.error('Failed to load deals:', err);
+    }
+  };
+
+  // Check if auction is complete (all nodes are grey/none)
+  const isAuctionComplete = () => {
+    if (!treeData || !treeData.nodes) return false;
+
+    // Check all non-closed nodes
+    const activeNodes = Object.values(treeData.nodes).filter(node => node.status !== 'closed');
+    if (activeNodes.length === 0) return false;
+
+    // All active nodes must have who_needs = 'none' for auction to be complete
+    return activeNodes.every(node => node.who_needs === 'none');
+  };
+
+  // Toggle dev mode (for developers to view tree in real-time)
+  const toggleDevMode = async () => {
+    const newDevMode = !devMode;
+    setDevMode(newDevMode);
+    localStorage.setItem('treeDevMode', newDevMode.toString());
+
+    // Refresh data when enabling dev mode
+    if (newDevMode && session?.id && selectedDealIndex) {
+      try {
+        setRefreshing(true);
+        setError(null);
+
+        // Load tree and comments in parallel
+        const [treeResponse, commentsResponse] = await Promise.all([
+          sessionService.fetchAuctionTree(session.id, selectedDealIndex),
+          sessionService.fetchNodeComments(session.id, selectedDealIndex)
+        ]);
+
+        setTreeData(treeResponse);
+
+        if (commentsResponse.comments) {
+          const commentsMap = {};
+          commentsResponse.comments.forEach(comment => {
+            if (!commentsMap[comment.node_id]) {
+              commentsMap[comment.node_id] = [];
+            }
+            commentsMap[comment.node_id].push(comment);
+          });
+          setComments(commentsMap);
+        }
+      } catch (err) {
+        console.error('Failed to refresh data:', err);
+        setError('Failed to refresh auction tree');
+      } finally {
+        setRefreshing(false);
+      }
     }
   };
 
@@ -441,7 +496,10 @@ function TreeView({ session, onBackToGame }) {
           <button className="back-btn" onClick={onBackToGame}>
             ← Back to Sessions
           </button>
-          <h2>Auction Tree - {session?.name}</h2>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
         </div>
         <div className="tree-container">
           <p>Loading tree...</p>
@@ -457,7 +515,10 @@ function TreeView({ session, onBackToGame }) {
           <button className="back-btn" onClick={onBackToGame}>
             ← Back to Sessions
           </button>
-          <h2>Auction Tree - {session?.name}</h2>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
         </div>
         <div className="tree-container">
           <p className="error">{error}</p>
@@ -476,10 +537,39 @@ function TreeView({ session, onBackToGame }) {
           <button className="back-btn" onClick={onBackToGame}>
             ← Back to Sessions
           </button>
-          <h2>Auction Tree - {session?.name}</h2>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
         </div>
         <div className="tree-container">
           <p className="info-message">No deals with auction data yet. Make some bids to generate the auction tree.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if tree can be viewed (auction complete OR dev mode)
+  const canViewTree = devMode || isAuctionComplete();
+
+  if (!canViewTree) {
+    return (
+      <div className="tree-view">
+        <div className="tree-header">
+          <button className="back-btn" onClick={onBackToGame}>
+            ← Back to Sessions
+          </button>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
+        </div>
+        <div className="tree-container">
+          <p className="info-message">
+            The auction tree will be available once all possible auction paths have been completed.
+            Continue making bids or wait your partner to operate,
+            until all nodes are resolved.
+          </p>
         </div>
       </div>
     );
@@ -491,7 +581,10 @@ function TreeView({ session, onBackToGame }) {
         <button className="back-btn" onClick={onBackToGame}>
           ← Back to Sessions
         </button>
-        <h2>Auction Tree - {session?.name}</h2>
+        <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+          Auction Tree - {session?.name}
+          {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+        </h2>
 
         <div className="deal-selector">
           <label>Deal: </label>
