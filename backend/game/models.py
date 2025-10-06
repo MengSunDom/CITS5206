@@ -10,7 +10,7 @@ position_choice = [('N', 'North'), ('S', 'South'),
 class Session(models.Model):
     VULNERABILITY_CHOICES = [('None','None'), ('NS','NS'),
         ('EW','EW'), ('Both','Both'),]
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=50, unique=True)
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
