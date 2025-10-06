@@ -172,13 +172,12 @@ function BridgeGameConnected({ session, onBack }) {
       </div>
     );
   };
+  
 
   return (
     <div className="bridge-game">
       <div className="game-header">
-        <button onClick={onBack} className="back-button">
-          ← Back to Sessions
-        </button>
+       
         <h2>{session.name}</h2>
         <div className="session-info">
           <span>Dealer: {session.dealer}</span>

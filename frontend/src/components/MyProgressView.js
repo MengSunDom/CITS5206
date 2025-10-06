@@ -171,23 +171,11 @@ function MyProgressView({ session, dealIndex, onBackToGame }) {
           </div>
         </div>
 
-        <div className="details-section">
-          <h2>Details</h2>
-          {selectedNode ? (
-            <div className="node-details">
-              <h3>Node {selectedNode.node_id}</h3>
-              <p><strong>Seat:</strong> {selectedNode.seat}</p>
-              <p><strong>History:</strong> {selectedNode.history || '(Start)'}</p>
-              <p><strong>Your Call:</strong> {selectedNode.your_call || 'No answer yet'}</p>
-              {selectedNode.created_at && (
-                <p><strong>Time:</strong> {new Date(selectedNode.created_at).toLocaleString()}</p>
-              )}
-            </div>
-          ) : (
-            <p>Click on a node in the timeline to see details</p>
-          )}
-        </div>
+        
+
+       
       </div>
+      
 
       {showRewindModal && (
         <div className="modal-overlay" onClick={handleRewindCancel}>

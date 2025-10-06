@@ -991,9 +991,11 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
   return (
     <div className="game-area">
       <div className="game-header">
+        
         <button className="back-btn" onClick={onBackToSessions}>
           ← Back to Sessions
         </button>
+        
         <h2>{session.name} {viewMode === 'history' ? '- History Review' : ''}</h2>
         <div className="sync-status">
           {isSyncing && <span>🔄 Syncing...</span>}
