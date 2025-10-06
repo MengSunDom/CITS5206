@@ -703,200 +703,66 @@ function GameAreaConnected({ session, onBackToSessions, onShowProgressView, relo
 
 
   const renderHands = () => {
-    if (!currentDeal || !currentDeal.hands) {
-      return <p>No hands dealt yet.</p>;
-    }
+  if (!currentDeal || !currentDeal.hands) {
+    return <p>No hands dealt yet.</p>;
+  }
 
-
-    const displayPositions = getDisplayPositions();
-    const positionNames = {
-      'N': 'North',
-      'E': 'East',
-      'S': 'South',
-      'W': 'West'
-    };
-
-
-    // Create rotated display with user always at South
-    const tablePositions = {
-      north: displayPositions['N'],
-      east: displayPositions['E'],
-      south: userPosition, // User's actual position shown at South
-      west: displayPositions['W']
-    };
-
-
-    return (
-      <div className="bridge-table">
-        {/* North position (top) */}
-        <div className={`position north ${currentBiddingPosition === tablePositions.north ? 'current-bidder' : ''}`}>
-          <div className="position-label">
-            {tablePositions.north === userPosition ? `${positionNames[tablePositions.north]} (Partner)` : positionNames[tablePositions.north]}
-            {currentBiddingPosition === tablePositions.north && <span className="bidding-indicator">🎯</span>}
-          </div>
-          <div className="cards">
-            {(currentBiddingPosition === tablePositions.north || viewMode === 'history') ? (
-              currentDeal.hands[tablePositions.north] && Object.entries(currentDeal.hands[tablePositions.north]).map(([suit, cards]) => (
-                <div key={suit} className="suit-row">
-                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                    {getSuitSymbol(suit)}
-                  </span>
-                  <div className="cards-list">
-                    {sortCards(cards).map((card, index) => {
-                      const suitSymbol = getSuitSymbol(suit);
-                      const isRed = suit === 'H' || suit === 'D';
-                      return (
-                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
-                          <div className="card-content">
-                            <span className="card-value">{card}</span>
-                            <span className="card-suit">{suitSymbol}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="card-back-container">
-                {[...Array(13)].map((_, i) => (
-                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
-                    <div className="card-pattern"></div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-
-        {/* West position (left) */}
-        <div className={`position west ${currentBiddingPosition === tablePositions.west ? 'current-bidder' : ''}`}>
-          <div className="position-label">
-            {positionNames[tablePositions.west]}
-            {currentBiddingPosition === tablePositions.west && <span className="bidding-indicator">🎯</span>}
-          </div>
-          <div className="cards">
-            {(currentBiddingPosition === tablePositions.west || viewMode === 'history') ? (
-              currentDeal.hands[tablePositions.west] && Object.entries(currentDeal.hands[tablePositions.west]).map(([suit, cards]) => (
-                <div key={suit} className="suit-row">
-                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                    {getSuitSymbol(suit)}
-                  </span>
-                  <div className="cards-list">
-                    {sortCards(cards).map((card, index) => {
-                      const suitSymbol = getSuitSymbol(suit);
-                      const isRed = suit === 'H' || suit === 'D';
-                      return (
-                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
-                          <div className="card-content">
-                            <span className="card-value">{card}</span>
-                            <span className="card-suit">{suitSymbol}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="card-back-container">
-                {[...Array(13)].map((_, i) => (
-                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
-                    <div className="card-pattern"></div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-
-        {/* East position (right) */}
-        <div className={`position east ${currentBiddingPosition === tablePositions.east ? 'current-bidder' : ''}`}>
-          <div className="position-label">
-            {positionNames[tablePositions.east]}
-            {currentBiddingPosition === tablePositions.east && <span className="bidding-indicator">🎯</span>}
-          </div>
-          <div className="cards">
-            {(currentBiddingPosition === tablePositions.east || viewMode === 'history') ? (
-              currentDeal.hands[tablePositions.east] && Object.entries(currentDeal.hands[tablePositions.east]).map(([suit, cards]) => (
-                <div key={suit} className="suit-row">
-                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                    {getSuitSymbol(suit)}
-                  </span>
-                  <div className="cards-list">
-                    {sortCards(cards).map((card, index) => {
-                      const suitSymbol = getSuitSymbol(suit);
-                      const isRed = suit === 'H' || suit === 'D';
-                      return (
-                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
-                          <div className="card-content">
-                            <span className="card-value">{card}</span>
-                            <span className="card-suit">{suitSymbol}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="card-back-container">
-                {[...Array(13)].map((_, i) => (
-                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
-                    <div className="card-pattern"></div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-
-        {/* South position (bottom) - User position but only show cards when it's their turn or in history mode */}
-        <div className={`position south ${currentBiddingPosition === userPosition ? 'current-bidder' : ''}`}>
-          <div className="position-label">
-            {positionNames[userPosition]} (You)
-            {currentBiddingPosition === userPosition && <span className="bidding-indicator">🎯</span>}
-          </div>
-          <div className="cards">
-            {(currentBiddingPosition === userPosition || viewMode === 'history') ? (
-              currentDeal.hands[userPosition] && Object.entries(currentDeal.hands[userPosition]).map(([suit, cards]) => (
-                <div key={suit} className="suit-row">
-                  <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
-                    {getSuitSymbol(suit)}
-                  </span>
-                  <div className="cards-list">
-                    {sortCards(cards).map((card, index) => {
-                      const suitSymbol = getSuitSymbol(suit);
-                      const isRed = suit === 'H' || suit === 'D';
-                      return (
-                        <div key={index} className={`card ${isRed ? 'red' : 'black'} card-animate`} style={{ animationDelay: `${index * 0.1}s` }}>
-                          <div className="card-content">
-                            <span className="card-value">{card}</span>
-                            <span className="card-suit">{suitSymbol}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="card-back-container">
-                {[...Array(13)].map((_, i) => (
-                  <div key={i} className="card card-back card-animate" style={{ animationDelay: `${i * 0.05}s` }}>
-                    <div className="card-pattern"></div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+  const positionNames = {
+    'N': 'North',
+    'E': 'East',
+    'S': 'South',
+    'W': 'West'
   };
+
+
+  const activePosition = currentBiddingPosition; 
+  const myHand = currentDeal.hands[activePosition];
+
+  if (!myHand) {
+    return <p>No cards for this position.</p>;
+  }
+
+  return (
+    <div className={`my-hand ${currentBiddingPosition === activePosition ? 'current-bidder' : ''}`}>
+      <div className="position-label">
+        {positionNames[activePosition]} (You)
+        {currentBiddingPosition === activePosition && (
+          <span className="bidding-indicator">🎯</span>
+        )}
+      </div>
+
+      <div className="cards">
+        {Object.entries(myHand).map(([suit, cards]) => (
+          <div key={suit} className="suit-row">
+            <span className={`suit-symbol suit-${suit.toLowerCase()}`}>
+              {getSuitSymbol(suit)}
+            </span>
+            <div className="cards-list">
+              {sortCards(cards).map((card, index) => {
+                const suitSymbol = getSuitSymbol(suit);
+                const isRed = suit === 'H' || suit === 'D';
+                return (
+                  <div
+                    key={index}
+                    className={`card ${isRed ? 'red' : 'black'} card-animate`}
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    <div className="card-content">
+                      <span className="card-value">{card}</span>
+                      <span className="card-suit">{suitSymbol}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
 
 
   const renderAuctionHistory = () => {
