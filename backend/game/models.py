@@ -10,7 +10,7 @@ position_choice = [('N', 'North'), ('S', 'South'),
 class Session(models.Model):
     VULNERABILITY_CHOICES = [('None','None'), ('NS','NS'),
         ('EW','EW'), ('Both','Both'),]
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=50, unique=True)
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -219,6 +219,12 @@ class Node(models.Model):
         choices=[('open', 'Open'), ('closed', 'Closed')],
         default='open'
     )
+    depth = models.IntegerField(default=0, help_text="Number of calls from root")
+    who_needs = models.CharField(
+        max_length=20,
+        default='both',
+        help_text="Which users need to answer: 'both', 'creator', 'partner', or 'none'"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -388,3 +394,43 @@ class NodeComment(models.Model):
 
     def __str__(self):
         return f"{self.user.username}'s comment on node {self.node.id}"
+
+
+class Edge(models.Model):
+    """Represents a transition between nodes (for tree visualization)"""
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name='edges'
+    )
+    deal = models.ForeignKey(
+        Deal,
+        on_delete=models.CASCADE,
+        related_name='edges'
+    )
+    from_node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name='outgoing_edges'
+    )
+    to_node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name='incoming_edges'
+    )
+    call = models.CharField(max_length=10, help_text="The call made (e.g., '1H', 'P', 'X')")
+    by_set = models.JSONField(
+        default=list,
+        help_text="List of user roles: ['creator'], ['partner'], or ['creator','partner']"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['session', 'deal']),
+            models.Index(fields=['from_node']),
+        ]
+        unique_together = ('session', 'deal', 'from_node', 'call')
+
+    def __str__(self):
+        return f"Edge: {self.call} from node {self.from_node.id} to {self.to_node.id}"

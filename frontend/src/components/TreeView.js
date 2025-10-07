@@ -14,6 +14,10 @@ function TreeView({ session, onBackToGame }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
+  const [devMode, setDevMode] = useState(() => {
+    // Check localStorage for dev mode flag
+    return localStorage.getItem('treeDevMode') === 'true';
+  });
   const svgRef = useRef(null);
 
   useEffect(() => {
@@ -26,13 +30,6 @@ function TreeView({ session, onBackToGame }) {
       loadAvailableDeals();
     }
   }, [session]);
-
-  useEffect(() => {
-    if (session && session.id && selectedDealIndex) {
-      loadTreeData();
-      loadComments();
-    }
-  }, [session, selectedDealIndex]);
 
   const loadAvailableDeals = async () => {
     try {
@@ -50,25 +47,53 @@ function TreeView({ session, onBackToGame }) {
     }
   };
 
-  const loadTreeData = async (isRefresh = false) => {
-    try {
-      if (isRefresh) {
+  // Check if auction is complete (all nodes are grey/none)
+  const isAuctionComplete = () => {
+    if (!treeData || !treeData.nodes) return false;
+
+    // Check all non-closed nodes
+    const activeNodes = Object.values(treeData.nodes).filter(node => node.status !== 'closed');
+    if (activeNodes.length === 0) return false;
+
+    // All active nodes must have who_needs = 'none' for auction to be complete
+    return activeNodes.every(node => node.who_needs === 'none');
+  };
+
+  // Toggle dev mode (for developers to view tree in real-time)
+  const toggleDevMode = async () => {
+    const newDevMode = !devMode;
+    setDevMode(newDevMode);
+    localStorage.setItem('treeDevMode', newDevMode.toString());
+
+    // Refresh data when enabling dev mode
+    if (newDevMode && session?.id && selectedDealIndex) {
+      try {
         setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      setError(null);
-      const data = await sessionService.fetchAuctionTree(session.id, selectedDealIndex);
-      setTreeData(data);
-      renderTree(data);
-    } catch (err) {
-      console.error('Failed to load tree data:', err);
-      setError('Failed to load auction tree');
-    } finally {
-      if (isRefresh) {
+        setError(null);
+
+        // Load tree and comments in parallel
+        const [treeResponse, commentsResponse] = await Promise.all([
+          sessionService.fetchAuctionTree(session.id, selectedDealIndex),
+          sessionService.fetchNodeComments(session.id, selectedDealIndex)
+        ]);
+
+        setTreeData(treeResponse);
+
+        if (commentsResponse.comments) {
+          const commentsMap = {};
+          commentsResponse.comments.forEach(comment => {
+            if (!commentsMap[comment.node_id]) {
+              commentsMap[comment.node_id] = [];
+            }
+            commentsMap[comment.node_id].push(comment);
+          });
+          setComments(commentsMap);
+        }
+      } catch (err) {
+        console.error('Failed to refresh data:', err);
+        setError('Failed to refresh auction tree');
+      } finally {
         setRefreshing(false);
-      } else {
-        setLoading(false);
       }
     }
   };
@@ -77,61 +102,85 @@ function TreeView({ session, onBackToGame }) {
     if (!data || !data.nodes || !svgRef.current) return;
 
     const svg = svgRef.current;
-    const svgWidth = 800;
-    const svgHeight = 600;
+    const svgWidth = 1600;
+    const svgHeight = 900;
     const nodeRadius = 20;
-    const levelHeight = 80;
-    const branchSpread = 100;
+    const levelHeight = 100;
+    const minNodeSpacing = 70;
 
     // Clear existing content
     while (svg.firstChild) {
       svg.removeChild(svg.firstChild);
     }
 
-    // Calculate node positions
-    const nodePositions = {};
-    const processedNodes = new Set();
-    const nodeQueue = [];
+    // Build adjacency map for tree structure
+    const childrenMap = {};
+    data.edges.forEach(edge => {
+      if (!childrenMap[edge.from]) {
+        childrenMap[edge.from] = [];
+      }
+      childrenMap[edge.from].push(edge.to);
+    });
+
+    // Calculate subtree width for each node (number of leaf nodes in subtree)
+    const subtreeWidths = {};
+    const calculateSubtreeWidth = (nodeId) => {
+      if (subtreeWidths[nodeId] !== undefined) {
+        return subtreeWidths[nodeId];
+      }
+
+      const children = childrenMap[nodeId] || [];
+      if (children.length === 0) {
+        // Leaf node
+        subtreeWidths[nodeId] = 1;
+        return 1;
+      }
+
+      // Sum of all children's subtree widths
+      let totalWidth = 0;
+      children.forEach(childId => {
+        totalWidth += calculateSubtreeWidth(childId);
+      });
+      subtreeWidths[nodeId] = totalWidth;
+      return totalWidth;
+    };
 
     if (data.root) {
-      nodeQueue.push({ id: data.root, x: svgWidth / 2, y: 50, level: 0 });
+      calculateSubtreeWidth(data.root);
     }
 
-    while (nodeQueue.length > 0) {
-      const { id, x, y, level } = nodeQueue.shift();
+    // Calculate node positions using subtree widths
+    const nodePositions = {};
+    const processedNodes = new Set();
 
-      if (processedNodes.has(id)) continue;
-      processedNodes.add(id);
+    const layoutTree = (nodeId, leftBound, rightBound, level) => {
+      if (processedNodes.has(nodeId)) return;
+      processedNodes.add(nodeId);
 
-      nodePositions[id] = { x, y, level };
-      const node = data.nodes[id];
+      // Position this node in the center of its allocated space
+      const x = (leftBound + rightBound) / 2;
+      const y = 50 + level * levelHeight;
+      nodePositions[nodeId] = { x, y, level };
 
-      // Find edges from this node
-      const childEdges = data.edges.filter(edge => edge.from === id);
+      const children = childrenMap[nodeId] || [];
+      if (children.length === 0) return;
 
-      if (childEdges.length === 1 && !node.divergence) {
-        // Single path (trunk continues)
-        const edge = childEdges[0];
-        nodeQueue.push({
-          id: edge.to,
-          x: x,
-          y: y + levelHeight,
-          level: level + 1
-        });
-      } else if (childEdges.length > 1) {
-        // Branching (divergence)
-        const spreadWidth = branchSpread * (childEdges.length - 1);
-        const startX = x - spreadWidth / 2;
+      // Allocate horizontal space to children based on their subtree widths
+      let currentX = leftBound;
+      children.forEach(childId => {
+        const childWidth = subtreeWidths[childId];
+        const totalWidth = subtreeWidths[nodeId];
+        const allocatedWidth = (rightBound - leftBound) * (childWidth / totalWidth);
 
-        childEdges.forEach((edge, index) => {
-          nodeQueue.push({
-            id: edge.to,
-            x: startX + (branchSpread * index),
-            y: y + levelHeight,
-            level: level + 1
-          });
-        });
-      }
+        layoutTree(childId, currentX, currentX + allocatedWidth, level + 1);
+        currentX += allocatedWidth;
+      });
+    };
+
+    if (data.root) {
+      const totalWidth = subtreeWidths[data.root] * minNodeSpacing;
+      const startX = (svgWidth - totalWidth) / 2;
+      layoutTree(data.root, startX, startX + totalWidth, 0);
     }
 
     // Draw edges
@@ -148,28 +197,44 @@ function TreeView({ session, onBackToGame }) {
         line.setAttribute('y1', fromPos.y);
         line.setAttribute('x2', toPos.x);
         line.setAttribute('y2', toPos.y);
-        line.setAttribute('class', data.nodes[edge.to]?.status === 'closed' ? 'edge closed' : 'edge');
+
+        // Determine edge color based on by_set
+        let bySetClass = '';
+        if (edge.by_set) {
+          if (edge.by_set.length === 2) {
+            bySetClass = 'by-both'; // black
+          } else if (edge.by_set.includes('creator')) {
+            bySetClass = 'by-creator'; // red
+          } else if (edge.by_set.includes('partner')) {
+            bySetClass = 'by-partner'; // blue
+          }
+        }
+
+        const statusClass = data.nodes[edge.to]?.status === 'closed' ? 'closed' : '';
+        line.setAttribute('class', `edge ${bySetClass} ${statusClass}`);
         edgeGroup.appendChild(line);
 
-        // Add call label
+        // Add call label centered on edge
         const labelGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        const midX = (fromPos.x + toPos.x) / 2;
-        const midY = (fromPos.y + toPos.y) / 2;
+
+        // Position label at center of edge
+        const labelX = (fromPos.x + toPos.x) / 2;
+        const labelY = (fromPos.y + toPos.y) / 2;
 
         // Background rect for label
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', midX - 30);
-        rect.setAttribute('y', midY - 10);
-        rect.setAttribute('width', 60);
-        rect.setAttribute('height', 20);
+        rect.setAttribute('x', labelX - 32);
+        rect.setAttribute('y', labelY - 16);
+        rect.setAttribute('width', 64);
+        rect.setAttribute('height', 32);
         rect.setAttribute('class', 'label-bg');
-        rect.setAttribute('rx', 3);
+        rect.setAttribute('rx', 4);
         labelGroup.appendChild(rect);
 
         // Call text
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', midX);
-        text.setAttribute('y', midY);
+        text.setAttribute('x', labelX);
+        text.setAttribute('y', labelY - 3);
         text.setAttribute('class', 'edge-label');
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('dominant-baseline', 'middle');
@@ -179,10 +244,10 @@ function TreeView({ session, onBackToGame }) {
         text.innerHTML = callText;
         labelGroup.appendChild(text);
 
-        // Who chose this call
+        // Who chose this call (smaller text below)
         const byText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        byText.setAttribute('x', midX);
-        byText.setAttribute('y', midY + 12);
+        byText.setAttribute('x', labelX);
+        byText.setAttribute('y', labelY + 9);
         byText.setAttribute('class', 'edge-by');
         byText.setAttribute('text-anchor', 'middle');
         byText.textContent = `(${edge.by.join(',')})`;
@@ -202,14 +267,32 @@ function TreeView({ session, onBackToGame }) {
       const node = data.nodes[nodeId];
       if (!node) return;
 
+      // Skip closed nodes - they represent ended branches
+      if (node.status === 'closed') return;
+
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-      // Node circle
+      // Node circle with who_needs color
       const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       circle.setAttribute('cx', pos.x);
       circle.setAttribute('cy', pos.y);
       circle.setAttribute('r', nodeRadius);
-      circle.setAttribute('class', `node ${node.divergence ? 'divergence' : ''} ${node.status}`);
+
+      // Determine who_needs class based on current user perspective
+      // Pink = current user needs, Light-blue = partner needs
+      let whoNeedsClass = '';
+      if (node.who_needs === 'both') {
+        whoNeedsClass = 'who-needs-both'; // yellow
+      } else if (node.who_needs === 'none') {
+        whoNeedsClass = 'who-needs-none'; // grey
+      } else if (node.who_needs === 'creator') {
+        // If creator needs to answer
+        whoNeedsClass = currentUser?.id === session?.creator?.id ? 'who-needs-me' : 'who-needs-partner-user';
+      } else if (node.who_needs === 'partner') {
+        // If partner needs to answer
+        whoNeedsClass = currentUser?.id === session?.partner?.id ? 'who-needs-me' : 'who-needs-partner-user';
+      }
+      circle.setAttribute('class', `node ${node.divergence ? 'divergence' : ''} ${node.status} ${whoNeedsClass}`);
 
       // Make divergence nodes clickable
       if (node.divergence) {
@@ -252,24 +335,50 @@ function TreeView({ session, onBackToGame }) {
     svg.appendChild(nodeGroup);
   };
 
-  const loadComments = async () => {
-    try {
-      const response = await sessionService.fetchNodeComments(session.id, selectedDealIndex);
-      if (response.comments) {
-        // Index comments by node_id for quick lookup
-        const commentsMap = {};
-        response.comments.forEach(comment => {
-          if (!commentsMap[comment.node_id]) {
-            commentsMap[comment.node_id] = [];
-          }
-          commentsMap[comment.node_id].push(comment);
-        });
-        setComments(commentsMap);
+  // Auto-load tree and comments when deal changes
+  useEffect(() => {
+    if (!session?.id || !selectedDealIndex) return;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Load tree and comments in parallel
+        const [treeResponse, commentsResponse] = await Promise.all([
+          sessionService.fetchAuctionTree(session.id, selectedDealIndex),
+          sessionService.fetchNodeComments(session.id, selectedDealIndex)
+        ]);
+
+        setTreeData(treeResponse);
+
+        if (commentsResponse.comments) {
+          const commentsMap = {};
+          commentsResponse.comments.forEach(comment => {
+            if (!commentsMap[comment.node_id]) {
+              commentsMap[comment.node_id] = [];
+            }
+            commentsMap[comment.node_id].push(comment);
+          });
+          setComments(commentsMap);
+        }
+      } catch (err) {
+        console.error('Failed to load data:', err);
+        setError('Failed to load auction tree');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Failed to load comments:', err);
+    };
+
+    fetchData();
+  }, [session?.id, selectedDealIndex]);
+
+  // Render tree when treeData or comments change
+  useEffect(() => {
+    if (treeData && !loading) {
+      renderTree(treeData);
     }
-  };
+  }, [treeData, comments, currentUser, session, loading]);
 
   const handleNodeClick = (nodeId, nodeData) => {
     // Only allow comments on divergence nodes
@@ -297,8 +406,18 @@ function TreeView({ session, onBackToGame }) {
       );
 
       if (response.ok) {
-        // Reload comments
-        await loadComments();
+        // Reload comments only
+        const commentsResponse = await sessionService.fetchNodeComments(session.id, selectedDealIndex);
+        if (commentsResponse.comments) {
+          const commentsMap = {};
+          commentsResponse.comments.forEach(comment => {
+            if (!commentsMap[comment.node_id]) {
+              commentsMap[comment.node_id] = [];
+            }
+            commentsMap[comment.node_id].push(comment);
+          });
+          setComments(commentsMap);
+        }
         setShowCommentModal(false);
         setSelectedNode(null);
         setCommentText('');
@@ -306,6 +425,39 @@ function TreeView({ session, onBackToGame }) {
     } catch (err) {
       console.error('Failed to save comment:', err);
       alert('Failed to save comment. Please try again.');
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!session?.id || !selectedDealIndex) return;
+
+    try {
+      setRefreshing(true);
+      setError(null);
+
+      // Load tree and comments in parallel
+      const [treeResponse, commentsResponse] = await Promise.all([
+        sessionService.fetchAuctionTree(session.id, selectedDealIndex),
+        sessionService.fetchNodeComments(session.id, selectedDealIndex)
+      ]);
+
+      setTreeData(treeResponse);
+
+      if (commentsResponse.comments) {
+        const commentsMap = {};
+        commentsResponse.comments.forEach(comment => {
+          if (!commentsMap[comment.node_id]) {
+            commentsMap[comment.node_id] = [];
+          }
+          commentsMap[comment.node_id].push(comment);
+        });
+        setComments(commentsMap);
+      }
+    } catch (err) {
+      console.error('Failed to refresh data:', err);
+      setError('Failed to refresh auction tree');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -337,10 +489,6 @@ function TreeView({ session, onBackToGame }) {
     return call;
   };
 
-  const handleRefresh = () => {
-    loadTreeData(true); // Pass true to indicate this is a refresh
-  };
-
   if (loading) {
     return (
       <div className="tree-view">
@@ -348,7 +496,10 @@ function TreeView({ session, onBackToGame }) {
           <button className="back-btn" onClick={onBackToGame}>
             ← Back to Sessions
           </button>
-          <h2>Auction Tree - {session?.name}</h2>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
         </div>
         <div className="tree-container">
           <p>Loading tree...</p>
@@ -364,7 +515,10 @@ function TreeView({ session, onBackToGame }) {
           <button className="back-btn" onClick={onBackToGame}>
             ← Back to Sessions
           </button>
-          <h2>Auction Tree - {session?.name}</h2>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
         </div>
         <div className="tree-container">
           <p className="error">{error}</p>
@@ -383,10 +537,39 @@ function TreeView({ session, onBackToGame }) {
           <button className="back-btn" onClick={onBackToGame}>
             ← Back to Sessions
           </button>
-          <h2>Auction Tree - {session?.name}</h2>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
         </div>
         <div className="tree-container">
           <p className="info-message">No deals with auction data yet. Make some bids to generate the auction tree.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if tree can be viewed (auction complete OR dev mode)
+  const canViewTree = devMode || isAuctionComplete();
+
+  if (!canViewTree) {
+    return (
+      <div className="tree-view">
+        <div className="tree-header">
+          <button className="back-btn" onClick={onBackToGame}>
+            ← Back to Sessions
+          </button>
+          <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+            Auction Tree - {session?.name}
+            {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+          </h2>
+        </div>
+        <div className="tree-container">
+          <p className="info-message">
+            The auction tree will be available once all possible auction paths have been completed.
+            Continue making bids or wait your partner to operate,
+            until all nodes are resolved.
+          </p>
         </div>
       </div>
     );
@@ -398,7 +581,10 @@ function TreeView({ session, onBackToGame }) {
         <button className="back-btn" onClick={onBackToGame}>
           ← Back to Sessions
         </button>
-        <h2>Auction Tree - {session?.name}</h2>
+        <h2 onDoubleClick={toggleDevMode} style={{ cursor: 'pointer' }}>
+          Auction Tree - {session?.name}
+          {devMode && <span style={{ fontSize: '0.7em', color: '#ff9800', marginLeft: '10px' }}>[DEV MODE]</span>}
+        </h2>
 
         <div className="deal-selector">
           <label>Deal: </label>
@@ -428,9 +614,8 @@ function TreeView({ session, onBackToGame }) {
         <svg
           ref={svgRef}
           className="auction-tree-svg"
-          width="800"
-          height="600"
-          viewBox="0 0 800 600"
+          viewBox="0 0 1600 900"
+          preserveAspectRatio="xMidYMid meet"
         >
           {/* Tree will be rendered here */}
         </svg>

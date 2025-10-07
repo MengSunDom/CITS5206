@@ -21,7 +21,8 @@ export const sessionService = {
         partner_position: data.partnerPosition || 'S',
         dealer: data.dealer || 'N',
         vulnerability: data.vulnerability || 'None',
-        hands: data.hands || {}
+        hands: data.hands || {},
+        max_deals: data.maxDeals || 4
       }),
     });
     return response.json();
@@ -63,18 +64,26 @@ export const sessionService = {
         // Log request details
         console.log("Request URL:", `/game/sessions/${sessionId}/undo_previous_bid/?current_deal=${previousDealNumber}`);
         console.log("UndoPreviousBid called with:", sessionId, previousDealNumber);
-        
+
         // Send POST request to undo the last bid
         const response = await apiCall(
-          `/game/sessions/${sessionId}/undo_previous_bid/?current_deal=${previousDealNumber}`, 
+          `/game/sessions/${sessionId}/undo_previous_bid/?current_deal=${previousDealNumber}`,
           { method: "POST" }
         );
-    
+
         console.log("Raw undo response:", response);
-    
+
         return response.json();
     },
-  
+
+  // Global Undo: Remove most recent active response across entire session
+  globalUndo: async (sessionId) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/undo/`, {
+      method: 'POST',
+    });
+    return response.json();
+  },
+
 
   // Make a bid in a session
   makeBid: async (sessionId, bidAction) => {
@@ -140,7 +149,7 @@ export const sessionService = {
   },
 
   // Make a user-specific call (for independent bidding)
-  makeUserCall: async (sessionId, dealId, position, call, alert = '') => {
+  makeUserCall: async (sessionId, dealId, position, call, alert = '', history = '') => {
     const response = await apiCall('/game/sessions/make_user_call/', {
       method: 'POST',
       body: JSON.stringify({
@@ -148,7 +157,8 @@ export const sessionService = {
         deal_id: dealId,
         position: position,
         call: call,
-        alert: alert
+        alert: alert,
+        history: history  // Include current branch history for validation
       }),
     });
     return response.json();
@@ -170,14 +180,6 @@ export const sessionService = {
         session_id: sessionId,
         deal_id: dealId
       }),
-    });
-    return response.json();
-  },
-
-  // Get next deal and position for practice
-  getNextPractice: async (sessionId, currentDealNumber = 0) => {
-    const response = await apiCall(`/game/sessions/${sessionId}/get_next_practice/?current_deal=${currentDealNumber}`, {
-      method: 'GET',
     });
     return response.json();
   },
@@ -228,6 +230,14 @@ export const sessionService = {
         node_id: nodeId,
         comment_text: commentText
       }),
+    });
+    return response.json();
+  },
+
+  // Get next task using simplified scheduler (PLUS4 then RANDOM_DEAL)
+  getNextTask: async (sessionId) => {
+    const response = await apiCall(`/game/sessions/${sessionId}/get_next_task/`, {
+      method: 'GET',
     });
     return response.json();
   },

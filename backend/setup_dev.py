@@ -49,7 +49,7 @@ def main():
     # Create mock users
     print("\n3. Creating mock users...")
     try:
-        call_command('create_mock_users', '--with-session')
+        call_command('create_mock_users')
         print("[OK] Mock users created")
     except Exception as e:
         print(f"[ERROR] Failed to create mock users: {e}")

@@ -9,6 +9,13 @@ function MyProgressView({ session, dealIndex, onBackToGame }) {
   const [showRewindModal, setShowRewindModal] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
   const [rewindLoading, setRewindLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    // Load current user from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setCurrentUser(user);
+  }, []);
 
   useEffect(() => {
     if (session && session.id && dealIndex) {
@@ -47,9 +54,31 @@ function MyProgressView({ session, dealIndex, onBackToGame }) {
       );
 
       if (result.ok) {
-        // Show success message
-        const message = `Successfully rewound to node. ${result.deleted_response_ids.length} answer(s) deleted.`;
-        alert(message);
+        // Build success message with recomputation statistics
+        const stats = result.recompute_stats || {};
+        const messages = [
+          `Successfully rewound to node.`,
+          `${result.deleted_response_count || 0} answer(s) deleted.`,
+        ];
+
+        // Add interesting stats if available
+        if (stats.nodes_reopened > 0) {
+          messages.push(`${stats.nodes_reopened} branch(es) reopened.`);
+        }
+        if (stats.divergences_changed > 0) {
+          messages.push(`${stats.divergences_changed} divergence(s) updated.`);
+        }
+
+        // Show next action
+        if (result.next_action) {
+          if (result.next_action.node_id) {
+            messages.push(`\nNext: ${result.next_action.scheduler_reason || 'Continue bidding'}`);
+          } else {
+            messages.push(`\n${result.next_action.message || 'All caught up!'}`);
+          }
+        }
+
+        alert(messages.join('\n'));
 
         // Navigate back to game to continue bidding
         // The game will reload with the updated sequence
@@ -62,6 +91,8 @@ function MyProgressView({ session, dealIndex, onBackToGame }) {
       alert('Failed to rewind: ' + err.message);
     } finally {
       setRewindLoading(false);
+      setShowRewindModal(false);
+      setSelectedNode(null);
     }
   };
 
@@ -128,12 +159,25 @@ function MyProgressView({ session, dealIndex, onBackToGame }) {
               const canRewind = index > 0 && index < nodes.length - 1;
               const isAtCurrentNode = node.node_id === current_node_id;
 
+              // Determine who_needs class based on current user perspective
+              // Pink = current user needs, Light-blue = partner needs
+              let whoNeedsClass = '';
+              if (node.who_needs === 'both') {
+                whoNeedsClass = 'who-needs-both';
+              } else if (node.who_needs === 'none') {
+                whoNeedsClass = 'who-needs-none';
+              } else if (node.who_needs === 'creator') {
+                whoNeedsClass = currentUser?.id === session?.creator?.id ? 'who-needs-me' : 'who-needs-partner-user';
+              } else if (node.who_needs === 'partner') {
+                whoNeedsClass = currentUser?.id === session?.partner?.id ? 'who-needs-me' : 'who-needs-partner-user';
+              }
+
               return (
                 <div
                   key={node.node_id}
                   className={`timeline-node ${isCurrent ? 'timeline-node--current' : ''} ${
                     node.is_terminal ? 'timeline-node--terminal' : ''
-                  }`}
+                  } ${whoNeedsClass}`}
                 >
                   <div className="timeline-node-marker">{index}</div>
                   <div className="timeline-node-content">
@@ -171,23 +215,11 @@ function MyProgressView({ session, dealIndex, onBackToGame }) {
           </div>
         </div>
 
-        <div className="details-section">
-          <h2>Details</h2>
-          {selectedNode ? (
-            <div className="node-details">
-              <h3>Node {selectedNode.node_id}</h3>
-              <p><strong>Seat:</strong> {selectedNode.seat}</p>
-              <p><strong>History:</strong> {selectedNode.history || '(Start)'}</p>
-              <p><strong>Your Call:</strong> {selectedNode.your_call || 'No answer yet'}</p>
-              {selectedNode.created_at && (
-                <p><strong>Time:</strong> {new Date(selectedNode.created_at).toLocaleString()}</p>
-              )}
-            </div>
-          ) : (
-            <p>Click on a node in the timeline to see details</p>
-          )}
-        </div>
+        
+
+       
       </div>
+      
 
       {showRewindModal && (
         <div className="modal-overlay" onClick={handleRewindCancel}>
@@ -196,9 +228,15 @@ function MyProgressView({ session, dealIndex, onBackToGame }) {
             <div className="modal-body">
               <p>
                 You will <strong>delete all your answers after this node</strong> on this branch.
-                A new sequence will be created from here.
               </p>
-              <p>This does not affect your partner's answers.</p>
+              <p>The system will automatically:</p>
+              <ul style={{ textAlign: 'left', paddingLeft: '20px' }}>
+                <li>Recompute divergences and tree structure</li>
+                <li>Update node states (open/closed)</li>
+                <li>Recalculate which nodes need answers</li>
+                <li>Assign you the next task via the scheduler</li>
+              </ul>
+              <p><em>This does not affect your partner's answers.</em></p>
             </div>
             <div className="modal-actions">
               <button
