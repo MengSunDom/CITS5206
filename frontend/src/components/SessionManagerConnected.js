@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { sessionService } from '../utils/gameService';
 import CreateSessionModalConnected from './CreateSessionModalConnected';
 import './SessionManager.css';
+import ProfileForm from "./profilepage.js";
+
 
 function SessionManagerConnected({ onEnterSession, onViewComparison }) {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [error, setError] = useState('');
-
+  const [showProfile, setShowProfile] = useState(false);
   useEffect(() => {
     loadSessions();
   }, []);
@@ -120,18 +122,32 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
       );
     });
   };
+  if (showProfile) {
+    return <ProfileForm onBack={() => setShowProfile(false)} />;
+  }
+
 
   return (
     <div className="session-manager">
       <div className="session-header">
         <h2>Your Bidding Sessions</h2>
+        <div>
         <button
-          className="create-session"
-          onClick={() => setShowCreateModal(true)}
-        >
-          Create New Session
-        </button>
-      </div>
+        className="create-session"
+        onClick={() => setShowCreateModal(true)}
+      >
+        Create New Session
+      </button>
+      <button
+        className="create-session"
+        style={{ background: '#6c757d', marginLeft: '10px' }}
+        onClick={() => setShowProfile(true)}
+      >
+        Profile
+      </button>
+    </div>
+  </div>
+
 
       <div className="session-list">
         {renderSessionItems()}

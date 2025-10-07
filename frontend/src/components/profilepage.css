@@ -1,0 +1,110 @@
+/* Container */
+.profile-container {
+  max-width: 600px;
+  margin: 40px auto;
+  padding: 30px;
+  background-color: #1e1e1e; /* Dark background */
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font-family: 'Arial', sans-serif;
+  color: #ffffff; /* White text */
+}
+
+/* Title */
+.profile-container h2 {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #ffffff;
+}
+
+/* Message */
+.profile-container p {
+  text-align: center;
+  color: #f39c12; /* Orange message */
+  margin-bottom: 15px;
+}
+
+/* Form layout */
+.profile-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Labels */
+.profile-container label {
+  display: flex;
+  flex-direction: column;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+/* Input fields */
+.profile-container input[type="text"],
+.profile-container select,
+.profile-container textarea {
+  margin-top: 5px;
+  padding: 8px 12px;
+  border: 1px solid #555555;
+  border-radius: 6px;
+  font-size: 14px;
+  background-color: #2c2c2c; /* Dark input background */
+  color: #ffffff;
+  transition: border 0.2s;
+}
+
+.profile-container input[type="text"]:focus,
+.profile-container select:focus,
+.profile-container textarea:focus {
+  border-color: #3498db;
+  outline: none;
+}
+
+/* Textarea height */
+.profile-container textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Button container */
+.profile-container div {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+/* Buttons */
+.profile-container button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: #ffffff;
+}
+
+/* Submit button */
+.profile-container button[type="submit"] {
+  background-color: #3498db;
+}
+
+.profile-container button[type="submit"]:hover {
+  background-color: #2980b9;
+}
+
+/* Back button */
+.profile-container button[type="button"] {
+  background-color: #555555;
+}
+
+.profile-container button[type="button"]:hover {
+  background-color: #777777;
+}
+
+/* Disabled input fields */
+.profile-container input[disabled] {
+  background-color: #3a3a3a;
+  color: #aaaaaa;
+  cursor: not-allowed;
+}
