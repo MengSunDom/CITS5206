@@ -2,41 +2,62 @@ import React, { useState } from 'react';
 import './LoginPage.css';
 
 function LoginPage({ onLogin, onShowSignup }) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Simple function to handle form submission
-  const handleSubmit = (e) => {
+  // Handle form submission with backend API
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    if (!username || !password) {
+    if (!email || !password) {
       setError('Please fill in all fields');
+      setLoading(false);
       return;
     }
 
-    // Check if user exists in localStorage
-    const savedUsers = localStorage.getItem('bridgeUsers');
-    if (!savedUsers) {
-      setError('Invalid username or password. Please try again or sign up.');
-      return;
-    }
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/login/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password
+        }),
+      });
 
-    const users = JSON.parse(savedUsers);
-    let userFound = false;
-    
-    for (let i = 0; i < users.length; i++) {
-      const user = users[i];
-      if (user.username === username && user.password === password) {
-        userFound = true;
-        onLogin(user);
-        break;
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store tokens in localStorage
+        if (data.tokens) {
+          localStorage.setItem('access_token', data.tokens.access);
+          localStorage.setItem('refresh_token', data.tokens.refresh);
+        }
+        
+        // Store user data
+        const userData = {
+          id: data.user.id,
+          username: data.user.username,
+          email: data.user.email
+        };
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        onLogin(userData);
+      } else {
+        // Handle error messages from backend
+        setError(data.detail || 'Invalid username or password. Please try again.');
       }
-    }
-    
-    if (!userFound) {
-      setError('Invalid username or password. Please try again or sign up.');
+    } catch (err) {
+      setError('Network error. Please check your connection and try again.');
+      console.error('Login error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,12 +104,12 @@ function LoginPage({ onLogin, onShowSignup }) {
             {error && <div className="error-message">{error}</div>}
             
             <div className="form-group">
-              <label>Username:</label>
+              <label>Email:</label>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter email"
                 required
               />
             </div>
@@ -111,7 +132,9 @@ function LoginPage({ onLogin, onShowSignup }) {
                   Sign Up now
                 </a>
               </span>
-              <button type="submit" className="login-btn">LOGIN</button>
+              <button type="submit" className="login-btn" disabled={loading}>
+                {loading ? 'LOGGING IN...' : 'LOGIN'}
+              </button>
             </div>
           </form>
         </div>

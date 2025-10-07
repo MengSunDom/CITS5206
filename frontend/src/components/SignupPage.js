@@ -7,55 +7,76 @@ function SignupPage({ onSignup, onShowLogin }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Simple function to handle form submission
-  const handleSubmit = (e) => {
+  // Handle form submission with backend API
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     if (!username || !email || !password || !confirmPassword) {
       setError('Please fill in all fields');
+      setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match!');
+      setLoading(false);
       return;
     }
 
-    // Check if username already exists
-    const savedUsers = localStorage.getItem('bridgeUsers');
-    let users = [];
-    if (savedUsers) {
-      users = JSON.parse(savedUsers);
-    }
-    
-    let usernameExists = false;
-    for (let i = 0; i < users.length; i++) {
-      if (users[i].username === username) {
-        usernameExists = true;
-        break;
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/register/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: username,
+          email: email,
+          password: password,
+          password2: confirmPassword
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store tokens in localStorage
+        if (data.tokens) {
+          localStorage.setItem('access_token', data.tokens.access);
+          localStorage.setItem('refresh_token', data.tokens.refresh);
+        }
+        
+        // Store user data
+        const userData = {
+          id: data.user.id,
+          username: data.user.username,
+          email: data.user.email
+        };
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        onSignup(userData);
+      } else {
+        // Handle specific error messages from backend
+        if (data.username) {
+          setError(data.username[0]);
+        } else if (data.email) {
+          setError(data.email[0]);
+        } else if (data.password) {
+          setError(data.password[0]);
+        } else {
+          setError(data.detail || 'Registration failed. Please try again.');
+        }
       }
+    } catch (err) {
+      setError('Network error. Please check your connection and try again.');
+      console.error('Registration error:', err);
+    } finally {
+      setLoading(false);
     }
-    
-    if (usernameExists) {
-      setError('Username already exists! Please choose a different username.');
-      return;
-    }
-
-    // Create new user
-    const newUser = {
-      id: Date.now(),
-      username: username,
-      email: email,
-      password: password,
-      created: new Date().toISOString()
-    };
-
-    users.push(newUser);
-    localStorage.setItem('bridgeUsers', JSON.stringify(users));
-    
-    onSignup(newUser);
   };
 
   return (
@@ -151,7 +172,9 @@ function SignupPage({ onSignup, onShowLogin }) {
                   Login here
                 </a>
               </span>
-              <button type="submit" className="login-btn">SIGN UP</button>
+              <button type="submit" className="login-btn" disabled={loading}>
+                {loading ? 'SIGNING UP...' : 'SIGN UP'}
+              </button>
             </div>
           </form>
         </div>

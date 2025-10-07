@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import SessionManager from './SessionManager';
-import GameArea from './GameArea';
+import SessionManagerConnected from './SessionManagerConnected';
+import GameAreaConnected from './GameAreaConnected';
 import TreeView from './TreeView';
 import ComparisonView from './ComparisonView';
-import CreateSessionModal from './CreateSessionModal';
 import './BridgeGame.css';
 
 function BridgeGame({ currentUser, onLogout }) {
   const [currentView, setCurrentView] = useState('sessions');
   const [currentSession, setCurrentSession] = useState(null);
   const [sessions, setSessions] = useState([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Load sessions when component first loads
   React.useEffect(() => {
@@ -20,22 +18,6 @@ function BridgeGame({ currentUser, onLogout }) {
       setSessions(sessionsList);
     }
   }, []);
-
-  // Simple function to create a new session
-  const createSession = (sessionData) => {
-    const newSession = {
-      id: Date.now(),
-      name: sessionData.name,
-      partner: sessionData.partner,
-      created: new Date().toISOString(),
-      deals: []
-    };
-    
-    const newSessionsList = [...sessions, newSession];
-    setSessions(newSessionsList);
-    localStorage.setItem('bridgeSessions', JSON.stringify(newSessionsList));
-    setShowCreateModal(false);
-  };
 
   // Simple function to enter a session
   const enterSession = (session) => {
@@ -93,16 +75,14 @@ function BridgeGame({ currentUser, onLogout }) {
       </div>
 
       {currentView === 'sessions' && (
-        <SessionManager
-          sessions={sessions}
-          onCreateSession={() => setShowCreateModal(true)}
+        <SessionManagerConnected
           onEnterSession={enterSession}
           onViewComparison={showComparisonView}
         />
       )}
 
       {currentView === 'game' && currentSession && (
-        <GameArea
+        <GameAreaConnected
           session={currentSession}
           onBackToSessions={backToSessions}
           onShowTreeView={showTreeView}
@@ -124,12 +104,6 @@ function BridgeGame({ currentUser, onLogout }) {
         />
       )}
 
-      {showCreateModal && (
-        <CreateSessionModal
-          onClose={() => setShowCreateModal(false)}
-          onCreateSession={createSession}
-        />
-      )}
     </div>
   );
 }
