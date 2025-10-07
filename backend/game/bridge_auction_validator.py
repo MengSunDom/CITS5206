@@ -1,6 +1,3 @@
-# Bridge Auction Validator - Comprehensive Implementation
-# Based on standard bridge auction rules as specified in the prompt
-
 from typing import Dict, List, Optional, Tuple
 
 class AuctionState:

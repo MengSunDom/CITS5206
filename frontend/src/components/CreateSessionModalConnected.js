@@ -4,6 +4,7 @@ import { sessionService } from '../utils/gameService';
 function CreateSessionModalConnected({ onClose, onSessionCreated }) {
   const [sessionName, setSessionName] = useState('');
   const [partnerEmail, setPartnerEmail] = useState('');
+  const [maxDeals, setMaxDeals] = useState(4);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -16,6 +17,7 @@ function CreateSessionModalConnected({ onClose, onSessionCreated }) {
       const sessionData = {
         name: sessionName,
         partnerEmail: partnerEmail,
+        maxDeals: maxDeals,
       };
 
       const response = await sessionService.createSession(sessionData);
@@ -65,6 +67,23 @@ function CreateSessionModalConnected({ onClose, onSessionCreated }) {
               required
               disabled={isLoading}
             />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="maxDeals">Number of Deals:</label>
+            <input
+              type="number"
+              id="maxDeals"
+              value={maxDeals}
+              onChange={(e) => setMaxDeals(parseInt(e.target.value))}
+              min="1"
+              max="100"
+              required
+              disabled={isLoading}
+            />
+            <small style={{ display: 'block', marginTop: '5px', color: '#6c757d' }}>
+              Choose between 1 and 100 deals for this session (default: 4)
+            </small>
           </div>
 
           {error && (

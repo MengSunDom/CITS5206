@@ -34,6 +34,7 @@ static_root/
 
 # Virtual Environments
 backend/venv/
+backend/.venv/
 backend/env/
 backend/ENV/
 
