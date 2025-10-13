@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { sessionService } from '../utils/gameService';
 import CreateSessionModalConnected from './CreateSessionModalConnected';
 import './SessionManager.css';
+import ProfileForm from "./profilepage.js";
+
 
 function SessionManagerConnected({ onEnterSession, onViewComparison }) {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [error, setError] = useState('');
-
+  const [showProfile, setShowProfile] = useState(false);
   useEffect(() => {
     loadSessions();
   }, []);
@@ -43,6 +45,11 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
     }
   };
 
+  const handleEnterSession = (session) => {
+    // Enter session - GameAreaConnected will use getNextTask to find next available node
+    onEnterSession(session);
+  };
+
   const countCompletedBids = (session) => {
     if (!session.player_games) return 0;
 
@@ -70,13 +77,21 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
       );
     }
 
+    // Get current user info
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+
     return sessions.map(session => {
       const completedBids = countCompletedBids(session);
+
+      // Determine who is the partner for current user
+      const isCreator = currentUser.id === session.creator?.id;
+      const partnerUser = isCreator ? session.partner : session.creator;
+      const partnerDisplay = partnerUser?.username || partnerUser?.email || 'Unknown';
 
       return (
         <div key={session.id} className="session-item">
           <h3>{session.name}</h3>
-          <p><strong>Partner:</strong> {session.partner?.email || session.partner?.username}</p>
+          <p><strong>Partner:</strong> {partnerDisplay}</p>
           <p><strong>Created:</strong> {new Date(session.create_at).toLocaleDateString()}</p>
           <p><strong>Dealer:</strong> {session.dealer}</p>
           <p><strong>Vulnerability:</strong> {session.vulnerability}</p>
@@ -85,7 +100,7 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
           <div className="session-actions">
             <button
               className="create-session"
-              onClick={() => onEnterSession(session)}
+              onClick={() => handleEnterSession(session)}
             >
               Enter Session
             </button>
@@ -107,18 +122,32 @@ function SessionManagerConnected({ onEnterSession, onViewComparison }) {
       );
     });
   };
+  if (showProfile) {
+    return <ProfileForm onBack={() => setShowProfile(false)} />;
+  }
+
 
   return (
     <div className="session-manager">
       <div className="session-header">
         <h2>Your Bidding Sessions</h2>
+        <div>
         <button
-          className="create-session"
-          onClick={() => setShowCreateModal(true)}
-        >
-          Create New Session
-        </button>
-      </div>
+        className="create-session"
+        onClick={() => setShowCreateModal(true)}
+      >
+        Create New Session
+      </button>
+      <button
+        className="create-session"
+        style={{ background: '#6c757d', marginLeft: '10px' }}
+        onClick={() => setShowProfile(true)}
+      >
+        Profile
+      </button>
+    </div>
+  </div>
+
 
       <div className="session-list">
         {renderSessionItems()}
