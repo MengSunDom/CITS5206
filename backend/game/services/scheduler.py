@@ -12,85 +12,29 @@ User = get_user_model()
 
 
 def requires_user(node: Node, user_id: int) -> bool:
-    """Check if node requires response from this user based on who_needs AND seat matching (for independent bidding)"""
-    from ..models import PlayerGame, UserBiddingSequence
-    from ..utils import get_next_position
+    """
+    Check if node requires response from this user.
 
+    The who_needs field is the source of truth - it already encodes:
+    - Who has already answered (via update_node_who_needs in auction_tree.py)
+    - Same-seat no-follow exemptions (via find_divergence_ancestry)
+    - Closed auction nodes (who_needs='none')
+
+    We simply check if who_needs includes this user.
+    """
     session = node.session
 
-    # First check who_needs
+    # Check who_needs field (already accounts for same-seat no-follow)
     if node.who_needs == 'none':
         return False
-
-    user_needs_based_on_field = False
-    if node.who_needs == 'both':
-        user_needs_based_on_field = True
+    elif node.who_needs == 'both':
+        return True
     elif node.who_needs == 'creator':
-        user_needs_based_on_field = (user_id == session.creator.id)
+        return (user_id == session.creator.id)
     elif node.who_needs == 'partner':
-        user_needs_based_on_field = (user_id == session.partner.id)
+        return (user_id == session.partner.id)
 
-    if not user_needs_based_on_field:
-        return False
-
-    # For independent bidding: check if this node matches user's current position in their sequence
-    user = User.objects.get(id=user_id)
-    user_sequence = UserBiddingSequence.objects.filter(
-        deal=node.deal,
-        user=user
-    ).first()
-
-    # Check if this node is on the same branch as user's sequence
-    # If user has a sequence, check if node's history matches the sequence
-    if user_sequence and user_sequence.sequence:
-        # Build user's history from their sequence
-        user_history_calls = [call.get('call') for call in user_sequence.sequence]
-        user_history = ' '.join(user_history_calls) if user_history_calls else ''
-
-        # If node's history is a prefix of user's history, calculate next position from user sequence
-        if user_history.startswith(node.history) or node.history.startswith(user_history):
-            # Same branch - use user's sequence
-            last_call = user_sequence.sequence[-1]
-            last_position = last_call.get('position', node.deal.dealer)
-            next_position = get_next_position(last_position)
-        else:
-            # Different branch - find user's last response on this branch path
-            # to determine correct position
-            branch_responses = Response.objects.filter(
-                node__deal=node.deal,
-                user=user,
-                is_active=True
-            ).select_related('node').order_by('-node__depth', '-timestamp')
-
-            # Find the deepest response where response.node.history is a prefix of node.history
-            last_branch_response = None
-            for resp in branch_responses:
-                resp_history = resp.node.history if resp.node.history else ''
-                # Check if this response is on the path to the target node
-                if node.history.startswith(resp_history):
-                    last_branch_response = resp
-                    break
-
-            if last_branch_response:
-                # User has answered nodes on this branch - next position from last answer
-                next_position = get_next_position(last_branch_response.node.seat_to_act)
-            else:
-                # User hasn't answered any node on this branch yet
-                # Calculate position from node's history
-                if node.history:
-                    history_calls = node.history.split()
-                    current_position = node.deal.dealer
-                    for _ in history_calls:
-                        current_position = get_next_position(current_position)
-                    next_position = current_position
-                else:
-                    next_position = node.deal.dealer
-    else:
-        # No sequence yet, start from dealer
-        next_position = node.deal.dealer
-
-    # User can only answer if their next position matches the node's seat_to_act
-    return next_position == node.seat_to_act
+    return False
 
 
 def get_last_answer(user_id: int, session_id: int) -> Optional[Tuple[int, int]]:

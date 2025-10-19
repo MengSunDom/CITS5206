@@ -87,7 +87,7 @@ class DealActionsMixin:
                     {'error': 'Invalid deal number'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
+            
         if not deal:
             return Response(
                 {'error': f'Deal {deal_number} not found.'},
